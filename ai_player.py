@@ -256,7 +256,16 @@ class AIPlayer:
                 # Partner winning: play low card
                 return min(same_suit, key=lambda c: c.rank.value)
             else:
-                # Try to win: play high card
+                # Try to win with lowest winning card
+                winning_card = self._get_current_winning_card(current_trick, trump_suit)
+                if winning_card:
+                    higher_cards = [card for card in same_suit if card.rank.value > winning_card.rank.value]
+                    if higher_cards:
+                        # Play LOWEST winning card
+                        return min(higher_cards, key=lambda c: c.rank.value)
+                
+                # Can't win or leading: play high card (or low if we want to save)
+                # For medium, just play highest to try and take the trick if leader
                 return max(same_suit, key=lambda c: c.rank.value)
         
         # Can't follow suit
@@ -303,19 +312,38 @@ class AIPlayer:
         # Must follow suit if possible
         same_suit = [card for card in hand if card.suit == led_suit]
         if same_suit:
+            winning_card = self._get_current_winning_card(current_trick, trump_suit)
+            
             if is_partner_winning:
                 # Partner winning: play lowest card to save high cards
+                # EXCEPT if we are last and we want to "overtake" to take the lead? 
+                # (Rare in partnership except to clear trumps, usually keep partner winning)
                 return min(same_suit, key=lambda c: c.rank.value)
-            else:
-                # Try to win with lowest winning card
-                winning_card = self._get_current_winning_card(current_trick, trump_suit)
-                if winning_card:
-                    higher_cards = [card for card in same_suit if card.rank.value > winning_card.rank.value]
-                    if higher_cards:
-                        return min(higher_cards, key=lambda c: c.rank.value)
-                
-                # Can't win: play lowest
-                return min(same_suit, key=lambda c: c.rank.value)
+            
+            # Opponent is winning
+            higher_cards = [card for card in same_suit if card.rank.value > winning_card.rank.value]
+            
+            # "Insnijden" / Finesse check:
+            # If an opponent is winning but our partner still HAS TO PLAY after us,
+            # we might play low to let the partner win, especially if our higher card 
+            # is not a certain winner (like a King when Ace is out) or if we want to 
+            # keep our high card for later.
+            num_played = len(current_trick)
+            if num_played < 3: # Someone (potentially partner) still plays after us
+                # If we have a high card but it's not the Ace, and we think partner might have Ace
+                # or we just want to see if partner can take it.
+                if higher_cards:
+                    best_card = max(higher_cards, key=lambda c: c.rank.value)
+                    if best_card.rank != Rank.Ace:
+                        # Consider playing low to "insnijden"
+                        return min(same_suit, key=lambda c: c.rank.value)
+
+            # Try to win with lowest winning card
+            if higher_cards:
+                return min(higher_cards, key=lambda c: c.rank.value)
+            
+            # Can't win: play lowest
+            return min(same_suit, key=lambda c: c.rank.value)
         
         # Can't follow suit
         trumps = [card for card in hand if card.suit == trump_suit]

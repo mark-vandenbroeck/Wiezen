@@ -691,11 +691,35 @@ class GameEngine:
         
         trump_suit = self._parse_suit(current_round.trump_suit)
         
-        # Determine if partner is winning (simplified)
+        # Determine partners
+        partner_ids = []
+        if current_round.winning_bid in ['Vraag', 'Troel']:
+            if player_id == current_round.bidder_id:
+                partner_ids = [current_round.partner_id]
+            elif player_id == current_round.partner_id:
+                partner_ids = [current_round.bidder_id]
+            else:
+                # Defenders are partners
+                all_ids = [p.id for p in Player.query.filter_by(game_id=self.game_id).all()]
+                partner_ids = [pid for pid in all_ids if pid != player_id and pid not in [current_round.bidder_id, current_round.partner_id]]
+        else:
+            # Solo contracts (Alleen, Abondance, Solo Slim, Miserie)
+            if player_id == current_round.bidder_id:
+                partner_ids = [] # No partners for attacker
+            else:
+                # All other players are partners for defenders
+                all_ids = [p.id for p in Player.query.filter_by(game_id=self.game_id).all()]
+                partner_ids = [pid for pid in all_ids if pid != player_id and pid != current_round.bidder_id]
+
+        # Determine if partner is winning
         is_partner_winning = False
+        if current_trick:
+            winning_id = self._determine_trick_winner(trick.cards_played, current_round.trump_suit)
+            if winning_id in partner_ids:
+                is_partner_winning = True
         
         # Determine if it's Miserie contract
-        is_miserie = current_round.winning_bid == 'Miserie'
+        is_miserie = current_round.winning_bid in ['Miserie', 'Open Miserie']
         
         ai = AIPlayer(difficulty=player.ai_difficulty)
         card = ai.select_card(hand, current_trick, trump_suit, led_suit, is_partner_winning, is_miserie)
