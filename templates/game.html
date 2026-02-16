@@ -53,12 +53,17 @@
     <div class="center-area">
         <div class="game-info">
             <div class="trump-info" id="trump-info">
-                <span>Troef: <span id="trump-suit"></span></span>
+                <span id="trump-suit-label">Troef:</span>
+                <span id="trump-suit"></span>
                 <span id="trump-card"></span>
             </div>
             <div class="round-info">
                 <span>Ronde: <span id="round-number">{{ game.current_round }}</span></span>
                 <span>Slag: <span id="trick-number">0</span></span>
+            </div>
+            <div class="game-actions">
+                <button id="toggle-debug-btn" class="btn btn-debug">{{ 'Debug Aan' if not game.debug_mode else 'Debug
+                    Uit' }}</button>
             </div>
         </div>
 
@@ -68,8 +73,6 @@
 
         <div class="game-controls">
             <button id="new-round-btn" class="btn btn-secondary" style="display: none;">Nieuwe Ronde</button>
-            <button id="toggle-debug-btn" class="btn btn-secondary">{{ 'Debug Aan' if not game.debug_mode else 'Debug
-                Uit' }}</button>
         </div>
     </div>
 

@@ -136,6 +136,8 @@ async function submitBid(bid) {
     }
 }
 
+let lastGameStateJson = null;
+
 async function updateGameState() {
     const response = await fetch(`/api/game/${GAME_ID}/state`);
     const newState = await response.json();
@@ -145,11 +147,16 @@ async function updateGameState() {
         return;
     }
 
+    // Determine if anything meaningful changed to avoid flickering
+    const newStateJson = JSON.stringify(newState);
+    const stateChanged = newStateJson !== lastGameStateJson;
+
     // Check if trick completed (trick number increased)
     if (lastTrickNum !== -1 && newState.round && newState.round.current_trick > lastTrickNum) {
         console.log('Trick completed! Delaying clear...');
         isTrickClearing = true;
         gameState = newState;
+        lastGameStateJson = newStateJson;
         lastTrickNum = gameState.round.current_trick;
         renderGameState();
 
@@ -160,12 +167,16 @@ async function updateGameState() {
             renderTrick();
             checkTurnAndAct();
         }, 3000);
-    } else {
+    } else if (stateChanged || isTrickClearing) {
         gameState = newState;
+        lastGameStateJson = newStateJson;
         if (gameState.round) {
             lastTrickNum = gameState.round.current_trick;
         }
         renderGameState();
+    } else {
+        // No change, skip render to avoid flickering
+        // console.log('State unchanged, skipping render.');
     }
 }
 
@@ -240,22 +251,59 @@ function renderGameState() {
     }
 
     // Render Dealer Indicator and Bids
-    document.querySelectorAll('.dealer-icon, .bid-bubble').forEach(el => el.remove());
+    document.querySelectorAll('.dealer-icon, .bid-bubble, .turn-star').forEach(el => el.remove());
 
     const dealerPos = gameState.round.dealer_position;
-    // Map dealerPos (0-3) to player ID?
-    // Player object has position and ID.
     const dealerPlayer = PLAYERS.find(p => p.position === dealerPos);
     if (dealerPlayer) {
         const dealerInfo = document.querySelector(`.player-area[data-position="${dealerPos}"] .player-info`);
         if (dealerInfo) {
             const icon = document.createElement('span');
             icon.className = 'dealer-icon';
-            icon.textContent = '★'; // Star icon for dealer
+            icon.textContent = '★';
             icon.title = 'Deler';
             dealerInfo.appendChild(icon);
         }
     }
+
+    // Render Turn Indicator (Star)
+    PLAYERS.forEach(player => {
+        const playerArea = document.querySelector(`.player-area[data-position="${player.position}"]`);
+        if (playerArea) {
+            let isCurrentTurn = false;
+            if (gameState && gameState.round) {
+                if (gameState.round.phase === 'bidding' || gameState.round.phase === 'choosing_alleen') {
+                    isCurrentTurn = (player.id === gameState.current_bidder_id);
+                } else if (gameState.round.phase === 'playing') {
+                    const currentTrick = gameState.current_trick;
+                    const cardsPlayed = currentTrick ? (currentTrick.cards_played || []).length : 0;
+                    if (cardsPlayed < 4) {
+                        let nextPlayerId;
+                        if (cardsPlayed === 0) {
+                            nextPlayerId = currentTrick.leader_id || gameState.round.first_player_id;
+                        } else {
+                            const lastPlay = currentTrick.cards_played[cardsPlayed - 1];
+                            const lastPlayerIndex = PLAYERS.findIndex(p => p.id === lastPlay.player_id);
+                            nextPlayerId = PLAYERS[(lastPlayerIndex + 1) % 4].id;
+                        }
+                        isCurrentTurn = (player.id === nextPlayerId);
+                    }
+                }
+            }
+
+            if (isCurrentTurn) {
+                const pInfo = playerArea.querySelector('.player-info');
+                if (pInfo) {
+                    const star = document.createElement('span');
+                    star.className = 'turn-star';
+                    star.textContent = '★';
+                    star.style.color = '#ffcc00';
+                    star.style.marginLeft = '5px';
+                    pInfo.appendChild(star);
+                }
+            }
+        }
+    });
 
     // Render Bids
     if (gameState.round.bids && gameState.round.phase !== 'playing') {
@@ -323,56 +371,56 @@ function renderGameState() {
         const modal = document.getElementById('bidding-modal');
         // Only show if it matches current player ID
         if (gameState.current_bidder_id === currentPlayerId && currentPlayerId !== null) {
-            if (!modal.classList.contains('active')) {
-                // Determine valid bids based on history
-                const bids = gameState.round.bids || [];
-                let maxBidValue = 0;
-                let hasVraag = false;
+            // Determine valid bids based on history
+            const bids = gameState.round.bids || [];
+            let maxBidValue = 0;
+            let hasVraag = false;
 
-                bids.forEach(b => {
-                    const val = getBidValue(b.bid);
-                    if (val > maxBidValue) maxBidValue = val;
-                    if (b.bid === 'Vraag') hasVraag = true;
-                });
+            bids.forEach(b => {
+                const val = getBidValue(b.bid);
+                if (val > maxBidValue) maxBidValue = val;
+                if (b.bid === 'Vraag') hasVraag = true;
+            });
 
-                // Update button states
-                document.querySelectorAll('.btn-bid').forEach(btn => {
-                    const bidType = btn.getAttribute('data-bid');
-                    let enabled = true;
+            // Update button states
+            document.querySelectorAll('.btn-bid').forEach(btn => {
+                const bidType = btn.getAttribute('data-bid');
+                let enabled = true;
 
-                    if (bidType === 'Pas') {
-                        enabled = true;
-                    } else if (bidType === 'Vraag') {
-                        enabled = maxBidValue === 0 && !hasVraag;
-                    } else if (bidType === 'Mee') {
-                        enabled = hasVraag && maxBidValue === 1;
-                    } else if (bidType === 'Abondance') {
-                        enabled = maxBidValue < 2;
-                    } else if (bidType === 'Miserie') {
-                        enabled = maxBidValue < 3;
-                    } else if (bidType === 'Open Miserie') {
-                        enabled = maxBidValue < 4;
-                    } else if (bidType === 'Solo Slim') {
-                        enabled = maxBidValue < 5;
-                    }
-
-                    btn.disabled = !enabled;
-                    btn.style.opacity = enabled ? '1' : '0.5';
-                    btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
-                });
-
-                // Handle Alleen choice
-                const biddingOptions = document.getElementById('bidding-options');
-                const alleenOptions = document.getElementById('alleen-options');
-
-                if (gameState.round.phase === 'choosing_alleen') {
-                    biddingOptions.style.display = 'none';
-                    alleenOptions.style.display = 'flex';
-                } else {
-                    biddingOptions.style.display = 'flex';
-                    alleenOptions.style.display = 'none';
+                if (bidType === 'Pas') {
+                    enabled = true;
+                } else if (bidType === 'Vraag') {
+                    enabled = maxBidValue === 0 && !hasVraag;
+                } else if (bidType === 'Mee') {
+                    enabled = hasVraag && maxBidValue === 1;
+                } else if (bidType === 'Abondance') {
+                    enabled = maxBidValue < 2;
+                } else if (bidType === 'Miserie') {
+                    enabled = maxBidValue < 3;
+                } else if (bidType === 'Open Miserie') {
+                    enabled = maxBidValue < 4;
+                } else if (bidType === 'Solo Slim') {
+                    enabled = maxBidValue < 5;
                 }
 
+                btn.disabled = !enabled;
+                btn.style.opacity = enabled ? '1' : '0.5';
+                btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+            });
+
+            // Handle Alleen choice
+            const biddingOptions = document.getElementById('bidding-options');
+            const alleenOptions = document.getElementById('alleen-options');
+
+            if (gameState.round.phase === 'choosing_alleen') {
+                biddingOptions.style.display = 'none';
+                alleenOptions.style.display = 'flex';
+            } else {
+                biddingOptions.style.display = 'grid';
+                alleenOptions.style.display = 'none';
+            }
+
+            if (!modal.classList.contains('active')) {
                 setTimeout(() => showBiddingModal(), 300);
             }
         } else {
@@ -463,11 +511,11 @@ function renderHands() {
 
 
 
+let lastTrickState = [];
+
 function renderTrick() {
     const trickArea = document.getElementById('trick-area');
     if (!trickArea) return;
-
-    trickArea.innerHTML = '';
 
     // If we are in the delay period after a trick ends, show the last trick cards
     let trickToShow = gameState.current_trick;
@@ -475,26 +523,75 @@ function renderTrick() {
         trickToShow = gameState.last_trick;
     }
 
-    if (!trickToShow || !trickToShow.cards_played || trickToShow.cards_played.length === 0) {
+    if (!trickToShow || !trickToShow.cards_played) {
+        trickArea.innerHTML = '';
+        lastTrickState = [];
         return;
     }
 
-    trickToShow.cards_played.forEach((cardPlay, index) => {
-        const { suit, rank } = parseCardName(cardPlay.card_name);
-        const cardEl = createCardElement(suit, rank, false);
-        cardEl.classList.add('card-played');
+    // Identify the new card to animate
+    const currentCards = trickToShow.cards_played;
+    const newCards = currentCards.filter(c => !lastTrickState.some(lc => lc.player_id === c.player_id && lc.card_name === c.card_name));
 
-        // Find player position
-        const player = PLAYERS.find(p => p.id === cardPlay.player_id);
-        if (player) {
-            const posClassMap = ['bottom', 'left', 'top', 'right'];
-            const className = `card-played-${posClassMap[player.position]}`;
-            cardEl.classList.add(className);
-            cardEl.style.zIndex = 10 + index;
-        }
+    // Only clear if necessary or if new cards are added
+    if (trickArea.innerHTML === '' || newCards.length > 0 || lastTrickState.length > currentCards.length) {
+        // We will rebuild the trick area, but we want to animate the new one
+        trickArea.innerHTML = '';
 
-        trickArea.appendChild(cardEl);
-    });
+        currentCards.forEach((cardPlay, index) => {
+            const { suit, rank } = parseCardName(cardPlay.card_name);
+            const cardEl = createCardElement(suit, rank, false);
+            cardEl.classList.add('card-played');
+
+            // Find player position
+            const player = PLAYERS.find(p => p.id === cardPlay.player_id);
+            if (player) {
+                const posClassMap = ['bottom', 'left', 'top', 'right'];
+                const className = `card-played-${posClassMap[player.position]}`;
+                cardEl.classList.add(className);
+                cardEl.style.zIndex = 10 + index;
+            }
+
+            const isNew = newCards.some(nc => nc.player_id === cardPlay.player_id && nc.card_name === cardPlay.card_name);
+
+            if (isNew) {
+                // FLIP animation
+                // 1. Target (Last) position is already set by classes
+                trickArea.appendChild(cardEl);
+
+                // 2. Determine Start (First) position
+                const handEl = document.getElementById(`hand-${cardPlay.player_id}`);
+                if (handEl) {
+                    const handRect = handEl.getBoundingClientRect();
+                    const trickRect = trickArea.getBoundingClientRect();
+
+                    // We need to calculate the relative offset
+                    const targetRect = cardEl.getBoundingClientRect();
+
+                    const startX = (handRect.left + handRect.width / 2) - (targetRect.left + targetRect.width / 2);
+                    const startY = (handRect.top + handRect.height / 2) - (targetRect.top + targetRect.height / 2);
+
+                    // 3. Invert
+                    cardEl.classList.add('card-animating');
+                    cardEl.style.transform += ` translate(${startX}px, ${startY}px) scale(0.5)`;
+                    cardEl.style.opacity = '0';
+
+                    // 4. Play
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            cardEl.classList.remove('card-animating');
+                            cardEl.style.transform = cardEl.style.transform.replace(/translate\([^)]+\) scale\([^)]+\)/, '');
+                            cardEl.style.opacity = '1';
+                        });
+                    });
+                }
+            } else {
+                trickArea.appendChild(cardEl);
+            }
+        });
+    }
+
+    lastTrickState = [...currentCards];
 }
 // Bidding
 function showBiddingModal() {
@@ -623,6 +720,8 @@ async function checkTurnAndAct() {
                     }
                 } finally {
                     isProcessingAI = false;
+                    // Trigger check for next player safely
+                    setTimeout(checkTurnAndAct, 100);
                 }
             } else if (nextPlayer && nextPlayer.is_human) {
                 console.log('It is HUMAN turn. Updating valid cards...');
