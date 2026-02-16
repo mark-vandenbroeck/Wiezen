@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Wiezen - Spel #{{ game.id }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .game-board {
+        min-height: 100vh;
+        max-height: 100vh;
+        display: grid;
+        grid-template-areas:
+            "top top top"
+            "left center right"
+            "bottom bottom bottom";
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-columns: 1fr 2fr 1fr;
+        gap: 8px;
+        padding: 8px;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="troel-announcement" class="troel-announcement" style="display: none;"></div>
+
+<div class="game-container game-board" id="game-board">
+    <!-- Top Player (AI) -->
+    <div class="player-area player-top" data-position="2">
+        <div class="player-info">
+            <span class="player-name">{{ players[2].name }}</span>
+            <span class="player-score" id="score-{{ players[2].id }}">0</span>
+            <span class="player-tricks-count" id="tricks-{{ players[2].id }}"></span>
+        </div>
+        <div class="player-hand" id="hand-{{ players[2].id }}">
+            <!-- Cards will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Left Player (AI) -->
+    <div class="player-area player-left" data-position="1">
+        <div class="player-info">
+            <span class="player-name">{{ players[1].name }}</span>
+            <span class="player-score" id="score-{{ players[1].id }}">0</span>
+            <span class="player-tricks-count" id="tricks-{{ players[1].id }}"></span>
+        </div>
+        <div class="player-hand" id="hand-{{ players[1].id }}">
+            <!-- Cards will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Center Area -->
+    <div class="center-area">
+        <div class="game-info">
+            <div class="trump-info" id="trump-info">
+                <span>Troef: <span id="trump-suit"></span></span>
+                <span id="trump-card"></span>
+            </div>
+            <div class="round-info">
+                <span>Ronde: <span id="round-number">{{ game.current_round }}</span></span>
+                <span>Slag: <span id="trick-number">0</span></span>
+            </div>
+        </div>
+
+        <div class="trick-area" id="trick-area">
+            <!-- Played cards appear here -->
+        </div>
+
+        <div class="game-controls">
+            <button id="new-round-btn" class="btn btn-secondary" style="display: none;">Nieuwe Ronde</button>
+            <button id="toggle-debug-btn" class="btn btn-secondary">{{ 'Debug Aan' if not game.debug_mode else 'Debug
+                Uit' }}</button>
+        </div>
+    </div>
+
+    <!-- Right Player (AI) -->
+    <div class="player-area player-right" data-position="3">
+        <div class="player-info">
+            <span class="player-name">{{ players[3].name }}</span>
+            <span class="player-score" id="score-{{ players[3].id }}">0</span>
+            <span class="player-tricks-count" id="tricks-{{ players[3].id }}"></span>
+        </div>
+        <div class="player-hand" id="hand-{{ players[3].id }}">
+            <!-- Cards will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Bottom Player (Human) -->
+    <div class="player-area player-bottom" data-position="0">
+        <div class="player-info">
+            <span class="player-name">{{ players[0].name }}</span>
+            <span class="player-score" id="score-{{ players[0].id }}">0</span>
+            <span class="player-tricks-count" id="tricks-{{ players[0].id }}"></span>
+        </div>
+        <div class="player-hand" id="hand-{{ players[0].id }}">
+            <!-- Cards will be inserted here -->
+        </div>
+    </div>
+</div>
+
+<!-- Bidding Modal -->
+<div id="bidding-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-content">
+            <h2>Bieden</h2>
+            <div id="modal-trump-info" class="trump-info"
+                style="justify-content: center; margin-bottom: 1rem; color: white;">
+                <!-- Populated by JS -->
+            </div>
+            <div id="bidding-options" class="bidding-options">
+                <button class="btn btn-bid" data-bid="Vraag">Vraag</button>
+                <button class="btn btn-bid" data-bid="Mee">Mee</button>
+                <button class="btn btn-bid" data-bid="Abondance">Abondance</button>
+                <button class="btn btn-bid" data-bid="Miserie">Miserie</button>
+                <button class="btn btn-bid" data-bid="Open Miserie">Open Miserie</button>
+                <button class="btn btn-bid" data-bid="Solo Slim">Solo Slim</button>
+                <button class="btn btn-bid" data-bid="Pas">Pas</button>
+            </div>
+            <div id="alleen-options" class="bidding-options"
+                style="display: none; flex-direction: column; gap: 10px; margin-top: 15px; border-top: 1px solid #444; padding-top: 15px;">
+                <p style="color: #ccc; margin-bottom: 5px;">Niemand gaat mee. Alleen gaan?</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button class="btn btn-bid" data-bid="Alleen" style="background: var(--accent-color);">Alleen Gaan
+                        (min. 5)</button>
+                    <button class="btn btn-bid" data-bid="Pas" style="background: #666;">Pas</button>
+                </div>
+            </div>
+            <div id="bidding-status"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Trump Selection Modal (for Solo Slim) -->
+<div id="trump-modal" class="modal">
+    <div class="modal-content">
+        <h2>Kies Troef</h2>
+        <div class="trump-options" style="display: flex; gap: 20px; justify-content: center; margin-top: 20px;">
+            <button class="btn-suit" data-suit="Heart"
+                style="font-size: 3em; color: var(--heart-color); background: none; border: none; cursor: pointer;">♥</button>
+            <button class="btn-suit" data-suit="Diamond"
+                style="font-size: 3em; color: var(--diamond-color); background: none; border: none; cursor: pointer;">♦</button>
+            <button class="btn-suit" data-suit="Club"
+                style="font-size: 3em; color: var(--club-color); background: none; border: none; cursor: pointer;">♣</button>
+            <button class="btn-suit" data-suit="Spade"
+                style="font-size: 3em; color: var(--spade-color); background: none; border: none; cursor: pointer;">♠</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const GAME_ID = {{ game.id }};
+    const PLAYERS = {{ players_json | tojson }};
+    const DEBUG_MODE = {{ 'true' if game.debug_mode else 'false' }};
+</script>
+<script src="{{ url_for('static', filename='js/game.js') }}?v=4"></script>
+{% endblock %}

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Wiezen - Home{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="home-header">
+        <h1>Wiezen</h1>
+        <p class="subtitle">Belgisch Kaartspel</p>
+    </div>
+
+    <div class="home-content">
+        <div class="new-game-section">
+            <h2>Nieuw Spel</h2>
+
+            <div class="form-group">
+                <label for="player-name">Jouw Naam:</label>
+                <input type="text" id="player-name" value="Jij" class="input-field">
+            </div>
+
+            <div class="form-group">
+                <label>AI Moeilijkheidsgraden:</label>
+                <div class="difficulty-grid">
+                    <div>
+                        <label for="ai1-difficulty">AI Links:</label>
+                        <select id="ai1-difficulty" class="select-field">
+                            <option value="easy">Makkelijk</option>
+                            <option value="medium" selected>Gemiddeld</option>
+                            <option value="hard">Moeilijk</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="ai2-difficulty">AI Boven:</label>
+                        <select id="ai2-difficulty" class="select-field">
+                            <option value="easy">Makkelijk</option>
+                            <option value="medium">Gemiddeld</option>
+                            <option value="hard" selected>Moeilijk</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="ai3-difficulty">AI Rechts:</label>
+                        <select id="ai3-difficulty" class="select-field">
+                            <option value="easy" selected>Makkelijk</option>
+                            <option value="medium">Gemiddeld</option>
+                            <option value="hard">Moeilijk</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="debug-mode">
+                    <span>Debug Modus (toon alle kaarten)</span>
+                </label>
+            </div>
+
+            <button id="start-game-btn" class="btn btn-primary">Start Spel</button>
+        </div>
+
+        {% if games %}
+        <div class="recent-games">
+            <h2>Recente Spellen</h2>
+            <div class="games-list">
+                {% for game in games %}
+                <div class="game-item">
+                    <div class="game-info">
+                        <span class="game-id">Spel #{{ game.id }}</span>
+                        <span class="game-date">{{ game.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                        <span class="game-status {{ game.status }}">{{ game.status }}</span>
+                    </div>
+                    <a href="{{ url_for('game', game_id=game.id) }}" class="btn btn-secondary">Bekijk</a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    document.getElementById('start-game-btn').addEventListener('click', async () => {
+        const playerName = document.getElementById('player-name').value || 'Jij';
+        const debugMode = document.getElementById('debug-mode').checked;
+        const aiDifficulties = [
+            document.getElementById('ai1-difficulty').value,
+            document.getElementById('ai2-difficulty').value,
+            document.getElementById('ai3-difficulty').value
+        ];
+
+        const response = await fetch('/game/new', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                player_name: playerName,
+                debug_mode: debugMode,
+                ai_difficulties: aiDifficulties
+            })
+        });
+
+        const data = await response.json();
+        if (data.game_id) {
+            window.location.href = `/game/${data.game_id}`;
+        }
+    });
+</script>
+{% endblock %}
