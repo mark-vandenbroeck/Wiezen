@@ -255,32 +255,43 @@ class AIPlayer:
         # Must follow suit if possible
         same_suit = [card for card in hand if card.suit == led_suit]
         if same_suit:
+            winning_card = self._get_current_winning_card(current_trick, trump_suit)
             if is_partner_winning:
                 # Partner winning: play low card
                 return min(same_suit, key=lambda c: c.rank.value)
             else:
                 # Try to win with lowest winning card
-                winning_card = self._get_current_winning_card(current_trick, trump_suit)
                 if winning_card:
                     higher_cards = [card for card in same_suit if card.rank.value > winning_card.rank.value]
+                    # If winning card is a trump and we aren't following with a trump, we can't win by following suit
+                    if winning_card.suit == trump_suit and led_suit != trump_suit:
+                        higher_cards = []
+                    
                     if higher_cards:
                         # Play LOWEST winning card
                         return min(higher_cards, key=lambda c: c.rank.value)
                 
-                # Can't win or leading: play high card (or low if we want to save)
-                # For medium, just play highest to try and take the trick if leader
-                return max(same_suit, key=lambda c: c.rank.value)
+                # Can't win: play lowest card to save high cards
+                return min(same_suit, key=lambda c: c.rank.value)
         
         # Can't follow suit
         trumps = [card for card in hand if card.suit == trump_suit]
         if trumps and not is_partner_winning:
-            # Trump if not partner winning
-            return max(trumps, key=lambda c: c.rank.value)
+            # Only trump if we can actually win
+            winning_card = self._get_current_winning_card(current_trick, trump_suit)
+            if winning_card:
+                if winning_card.suit == trump_suit:
+                    higher_trumps = [card for card in trumps if card.rank.value > winning_card.rank.value]
+                    if higher_trumps:
+                        return min(higher_trumps, key=lambda c: c.rank.value)
+                else:
+                    # Any trump wins against non-trump
+                    return min(trumps, key=lambda c: c.rank.value)
         
-        # Discard lowest card
+        # Can't win or no trumps: discard lowest card
         return min(hand, key=lambda c: c.rank.value)
     
-    def _hard_card_selection(self, hand, current_trick, trump_suit, led_suit, is_partner_winning, played_cards=None, player_voids=None):
+    def _hard_card_selection(self, hand, current_trick, trump_suit, led_suit, is_partner_winning, played_cards=None, player_voids=None, partner_ids=None):
         """Hard AI: Advanced strategic play with card counting and void tracking"""
         played_cards = played_cards or []
         player_voids = player_voids or {}
@@ -352,7 +363,10 @@ class AIPlayer:
             
             # Opponent is winning
             higher_cards = [card for card in same_suit if card.rank.value > winning_card.rank.value]
-            
+            # If winning card is a trump and we aren't following with a trump, we can't win by following suit
+            if winning_card and winning_card.suit == trump_suit and led_suit != trump_suit:
+                higher_cards = []
+                
             # Try to win with lowest winning card, but be smart
             if higher_cards:
                 # If we have a choice of winners, use the lowest one
@@ -374,6 +388,8 @@ class AIPlayer:
             elif winning_card:
                 # Winning card is not trump, any trump wins
                 return min(trumps, key=lambda c: c.rank.value)
+            
+            # If we can't overtrump, don't waste a trump unless forced
         
         # Discard lowest non-trump card
         # EXCEPT: discard a suit where we want to become void!
