@@ -98,14 +98,42 @@ De biedingen volgen een strikte rangorde:
 - Hoogste kaart van de uitgekomen kleur wint (tenzij troef gespeeld wordt).
 - Troef kaarten winnen altijd van niet-troef kaarten.
 
-## Geavanceerde AI Logica
+## Strategie en AI Logica
 
-De AI op het "Moeilijk" niveau gebruikt de volgende technieken:
-- **Kaarten Tellen**: De AI onthoudt welke Azen en Heren zijn gespeeld om te weten of hun eigen kaarten nu "meesters" zijn.
-- **Void Tracking**: Identificeert welke suits tegenstanders niet meer hebben. De AI kan deze kleuren trekken om tegenstanders te dwingen hun troeven te gebruiken.
-- **Partnerschap Logica**: De AI herkent teamgenoten en speelt defensief/ondersteunend (bijv. laag spelen als de partner de slag al wint).
-- **Miserie Verdediging**: De AI speelt slim tegen Miserie door hoge kaarten weg te gooien als de Miserie-speler in een slag al "veilig" (laag) heeft gespeeld.
-- **Biedingsbewustzijn**: De AI volgt de strikte hiërarchie en zal niet proberen ongeldige biedingen te doen.
+Het spel bevat drie AI niveaus, waarbij het "Moeilijk" (Hard) niveau gebruik maakt van geavanceerde technieken en simulaties.
+
+### Biedstrategie (Hard AI)
+De AI bepaalt zijn bod niet op basis van simpele regeltjes, maar door **Monte Carlo Simulaties**:
+1.  **Hand Evaluatie**: De AI simuleert 30-40 keer het uitspelen van zijn eigen hand tegen willekeurige tegenstander-handen voor *elke* mogelijke troefkleur.
+2.  **Verwachte Slagen**: Op basis hiervan berekent hij het gemiddeld aantal verwachte slagen.
+3.  **Drempelwaardes**:
+    -   **Solo Slim**: > 12.5 verwachte slagen.
+    -   **Abondance**: > 9.0 verwachte slagen in de beste kleur.
+    -   **Vraag**: > 5.5 verwachte slagen met de gedraaide troef.
+    -   **Mee**: > 4.5 verwachte slagen.
+    -   **Miserie**: < 1.5 verwachte slagen in de *beste* kleur (dus zelfs met zijn beste kleur haalt hij bijna niets).
+
+### Speelstrategie (Hard AI)
+De AI past zijn speelstijl aan op basis van zijn rol (Aanvaller vs. Verdediger) en het type spel.
+
+#### 1. Algemene Technieken
+-   **Kansen Berekening**: Voor elke kaart berekent de AI de winstkans (0-100%) op basis van nog niet gespeelde hogere kaarten en mogelijke troeven bij tegenstanders.
+-   **Void Tracking**: De AI onthoudt welke spelers niet konden volgen op een kleur. Hij past zijn kansberekening hier op aan (risico op introeven) en kan zelfs bewust die kleuren spelen om troeven te "forceren".
+-   **Partnerschap Herkenning**: De AI weet wie zijn partner is (bieder of mee-gaander) en zal nooit een slag van zijn partner proberen over te nemen als die al wint.
+
+#### 2. Aanvallende Tactieken (Bieder/Partner)
+-   **Troeven Trekken**: Als aanvaller zal de AI agressief **troef uitkomen** om de verdedigers te ontwapenen totdat hun troeven op zijn.
+-   **Sure Winners**: Speelt kaarten uit met een berekende winstkans van >90% om zekerheid in te bouwen.
+
+#### 3. Verdedigende Tactieken
+-   **Troef Vermijden**: Verdedigers zullen bijna nooit troef uitkomen, tenzij ze hiertoe gedwongen worden. Ze bewaren hun troeven om slagen van de bieder af te troeven.
+-   **Miserie Verdediging**:
+    -   Als de Miserie-speler al gespeeld heeft en de slag *niet* wint (veilig is), zal de AI-verdediger zijn **hoogste kaart** van die kleur weggooien om 'gevaarlijke' slagen kwijt te raken.
+
+#### 4. Miserie Zelf Spelen
+-   **Starten**: Komt uit met de laagste kaart van zijn langste kleur (veiligheid).
+-   **Volgen**: Speelt altijd de hoogst mogelijke kaart die *onder* de huidige winnende kaart ligt (ducken). Als hij gedwongen wordt te winnen, pakt hij de laagst mogelijke winnaar.
+-   **Afgooien**: Gooit direct zijn gevaarlijkste hoge kaarten (Azen/Heren) weg als hij niet kan volgen.
 
 ## Ontwikkeling
 
