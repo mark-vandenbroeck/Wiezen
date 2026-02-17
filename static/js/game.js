@@ -490,7 +490,7 @@ function renderHands() {
 
         const cards = gameState.round.hands[player.id] || [];
         const isHuman = player.is_human;
-        const isHumanTurn = isHuman && (getCurrentTurnPlayerId() === player.id);
+        const isHumanTurn = isHuman && (getCurrentTurnPlayerId() === player.id) && gameState.round.phase === 'playing';
 
         // Open Miserie Reveal: bidder's hand revealed after trick 1
         let isOpenMiserieReveal = false;
