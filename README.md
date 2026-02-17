@@ -135,6 +135,11 @@ De AI past zijn speelstijl aan op basis van zijn rol (Aanvaller vs. Verdediger) 
 -   **Volgen**: Speelt altijd de hoogst mogelijke kaart die *onder* de huidige winnende kaart ligt (ducken). Als hij gedwongen wordt te winnen, pakt hij de laagst mogelijke winnaar.
 -   **Afgooien**: Gooit direct zijn gevaarlijkste hoge kaarten (Azen/Heren) weg als hij niet kan volgen.
 
+#### 5. Samenwerking & Seinen (Bridge-style)
+De Hard AI probeert informatie door te geven aan zijn partner:
+-   **Seinen (Zenden)**: Als de AI moet afgooien (niet kan volgen), zal hij proberen een **hoge kaart** (7, 8, 9, 10) van een sterke kleur af te gooien. Dit is een signaal ("High Call") dat hij die kleur graag gespeeld wil hebben.
+-   **Lezen & Samenwerken**: De AI analyseert de afgooi van zijn partner. Als hij een signaal detecteert, zal hij (als hij aan de beurt is) bij voorkeur **die kleur uitkomen** om zijn partner in de hand te spelen.
+
 ## Ontwikkeling
 
 ### Testen
