@@ -50,14 +50,14 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
 3. Kies moeilijkheidsniveaus voor de 3 AI spelers:
    - **Makkelijk**: Simpele random-achtige beslissingen
    - **Gemiddeld**: Redelijke strategie met basis regels
-   - **Moeilijk**: Geavanceerde strategie met kaart analyse
+   - **Moeilijk**: Geavanceerde strategie met kaarten tellen (onthoudt hoge kaarten) en void tracking (exploiteert kleuren waar tegenstanders vrij van zijn).
 4. Optioneel: Activeer debug modus om alle kaarten te zien
 5. Klik op "Start Spel"
 
 ### Spelen
 
 1. **Bieden**: Klik op je gewenste bod in de overzichtelijke 2-rijen layout.
-2. **Kaarten spelen**: Klik op een kaart in je hand om te spelen.
+2. **Kaarten spelen**: Klik op een kaart in je hand om te spelen met vloeiende animaties.
 3. **Slagen**: Na 4 kaarten wordt de slag automatisch bepaald.
 4. **Score**: Scores worden bijgehouden en getoond bij elke speler.
 5. **Miserie**: Bij een Miserie bod stopt het spel onmiddellijk zodra de bieder een slag haalt.
@@ -87,6 +87,13 @@ Klik op de "Debug Aan/Uit" knop tijdens het spel om de kaarten van tegenstanders
 - Volg kleur als je kan.
 - Hoogste kaart van de uitgekomen kleur wint (tenzij troef gespeeld wordt).
 - Troef kaarten winnen altijd van niet-troef kaarten.
+
+## Geavanceerde AI Logica
+
+De AI op het "Moeilijk" niveau gebruikt de volgende technieken:
+- **Kaarten Tellen**: De AI onthoudt welke Azen en Heren zijn gespeeld om te weten of hun eigen kaarten nu "meesters" zijn.
+- **Void Tracking**: Identificeert welke suits tegenstanders niet meer hebben. De AI kan deze kleuren trekken om tegenstanders te dwingen hun troeven te gebruiken.
+- **Partnerschap Logica**: De AI herkent teamgenoten en speelt defensief/ondersteunend (bijv. laag spelen als de partner de slag al wint).
 
 ## Project Structuur
 
@@ -135,11 +142,10 @@ python app.py
 
 ## Toekomstige Uitbreidingen
 
-- Geavanceerdere AI voor Abondance en Solo Slim
 - Spel geschiedenis en statistieken
 - Multiplayer ondersteuning
-- Animaties verbeteren
 - Geluid effecten
+- Meer interactieve handleiding
 
 ## Licentie
 
