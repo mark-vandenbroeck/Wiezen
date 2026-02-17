@@ -69,6 +69,17 @@ function setupEventListeners() {
             }
         });
     });
+
+    // History button
+    const historyBtn = document.getElementById('history-btn');
+    if (historyBtn) {
+        historyBtn.addEventListener('click', showHistoryModal);
+    }
+
+    const closeHistoryBtn = document.getElementById('close-history-btn');
+    if (closeHistoryBtn) {
+        closeHistoryBtn.addEventListener('click', hideHistoryModal);
+    }
 }
 
 /**
@@ -760,6 +771,104 @@ function gameLoop() {
             await updateGameState();
         }
     }, 2000);
+}
+
+// History Modal Management
+async function showHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    if (!modal) return;
+
+    await fetchAndPopulateHistory();
+    modal.classList.add('active');
+}
+
+function hideHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+async function fetchAndPopulateHistory() {
+    try {
+        const response = await fetch(`/api/game/${GAME_ID}/history`);
+        const data = await response.json();
+
+        const tableHeader = document.getElementById('history-header');
+        const tableBody = document.getElementById('history-body');
+
+        // 1. Rebuild Header (keep first 3, add players)
+        while (tableHeader.children.length > 3) {
+            tableHeader.removeChild(tableHeader.lastChild);
+        }
+        data.players.forEach(p => {
+            const th = document.createElement('th');
+            th.textContent = p.name;
+            tableHeader.appendChild(th);
+        });
+
+        // 2. Populate Body
+        tableBody.innerHTML = '';
+        const dutchSuits = {
+            'Heart': 'Harten', 'Harten': 'Harten',
+            'Diamond': 'Ruiten', 'Ruiten': 'Ruiten',
+            'Club': 'Klaveren', 'Klaveren': 'Klaveren',
+            'Spade': 'Schuppen', 'Schuppen': 'Schuppen'
+        };
+
+        data.history.forEach(row => {
+            const tr = document.createElement('tr');
+
+            // Round #
+            const tdRound = document.createElement('td');
+            tdRound.textContent = row.round_number;
+            tr.appendChild(tdRound);
+
+            // Contract
+            const tdContract = document.createElement('td');
+            tdContract.className = 'contract-cell';
+            tdContract.textContent = row.winning_bid;
+            tr.appendChild(tdContract);
+
+            // Trump
+            const tdTrump = document.createElement('td');
+            if (row.trump_suit && row.winning_bid !== 'Pas' && row.winning_bid !== 'Miserie' && row.winning_bid !== 'Open Miserie') {
+                const suitName = dutchSuits[row.trump_suit] || row.trump_suit;
+                const symbol = getSuitSymbol(row.trump_suit);
+                const color = getSuitColor(row.trump_suit);
+                tdTrump.innerHTML = `<span style="color: ${color}">${suitName} ${symbol}</span>`;
+            } else {
+                tdTrump.textContent = '-';
+            }
+            tr.appendChild(tdTrump);
+
+            // Scores and Dealer
+            data.players.forEach(p => {
+                const tdScore = document.createElement('td');
+                const score = row.scores[p.id] || 0;
+
+                let scoreText = score > 0 ? `+${score}` : score;
+                let scoreClass = score > 0 ? 'score-plus' : (score < 0 ? 'score-minus' : '');
+
+                tdScore.innerHTML = `<span class="${scoreClass}">${scoreText}</span>`;
+
+                // Add dealer indicator
+                if (row.dealer_position === p.position) {
+                    const badge = document.createElement('span');
+                    badge.className = 'dealer-badge';
+                    badge.textContent = 'D';
+                    badge.title = 'Deler';
+                    tdScore.appendChild(badge);
+                }
+
+                tr.appendChild(tdScore);
+            });
+
+            tableBody.appendChild(tr);
+        });
+    } catch (e) {
+        console.error('Error fetching history:', e);
+    }
 }
 
 // Start game when page loads

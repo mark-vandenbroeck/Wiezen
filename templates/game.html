@@ -64,6 +64,7 @@
                 <span>Slag: <span id="trick-number">0</span></span>
             </div>
             <div class="game-actions">
+                <button id="history-btn" class="btn btn-secondary">Historiek</button>
                 <button id="toggle-debug-btn" class="btn btn-debug">{{ 'Debug Aan' if not game.debug_mode else 'Debug
                     Uit' }}</button>
             </div>
@@ -148,6 +149,31 @@
                 style="font-size: 3em; color: var(--club-color); background: none; border: none; cursor: pointer;">♣</button>
             <button class="btn-suit" data-suit="Spade"
                 style="font-size: 3em; color: var(--spade-color); background: none; border: none; cursor: pointer;">♠</button>
+        </div>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div id="history-modal" class="modal">
+    <div class="modal-content history-modal-content">
+        <div class="modal-header">
+            <h2>Spelhistoriek</h2>
+            <button id="close-history-btn" class="btn-close">&times;</button>
+        </div>
+        <div class="history-table-container">
+            <table id="history-table">
+                <thead>
+                    <tr id="history-header">
+                        <th>Ronde</th>
+                        <th>Kontrakt</th>
+                        <th>Troef</th>
+                        <!-- Player columns inserted here -->
+                    </tr>
+                </thead>
+                <tbody id="history-body">
+                    <!-- Rows inserted here -->
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

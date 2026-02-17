@@ -122,6 +122,41 @@ def game_state(game_id):
     return jsonify(state)
 
 
+@app.route('/api/game/<int:game_id>/history')
+def game_history(game_id):
+    """Get history of rounds and scores"""
+    rounds = GameRound.query.filter_by(game_id=game_id).order_by(GameRound.round_number.desc()).all()
+    players = Player.query.filter_by(game_id=game_id).order_by(Player.position).all()
+    
+    history = []
+    for r in rounds:
+        if r.phase != 'completed' and r.winning_bid is None:
+            continue
+            
+        round_scores = {}
+        # Initialize with 0
+        for p in players:
+            round_scores[p.id] = 0
+            
+        # Get actual scores
+        scores = Score.query.filter_by(game_id=game_id, round_number=r.round_number).all()
+        for s in scores:
+            round_scores[s.player_id] = s.points
+            
+        history.append({
+            'round_number': r.round_number,
+            'winning_bid': r.winning_bid or 'Inzet',
+            'trump_suit': r.trump_suit,
+            'dealer_position': r.dealer_position,
+            'scores': round_scores
+        })
+        
+    return jsonify({
+        'players': [p.to_dict() for p in players],
+        'history': history
+    })
+
+
 @app.route('/api/game/<int:game_id>/bid', methods=['POST'])
 def submit_bid(game_id):
     """Submit a bid"""
