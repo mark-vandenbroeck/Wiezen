@@ -69,9 +69,10 @@ class GameEngine:
     def sort_cards(card_list):
         """
         Sort a list of card names (Suit-Rank)
-        Order: Suit (Harten, Klaveren, Ruiten, Schuppen/Spaden), then Rank (High to Low)
+        Ensures suits alternate between Red (Hearts, Diamonds) and Black (Clubs, Spades) 
+        whenever possible for better readability.
         """
-        suit_order = {
+        suit_order_map = {
             'Harten': 0, 'Heart': 0,
             'Klaveren': 1, 'Club': 1, 
             'Ruiten': 2, 'Diamond': 2,
@@ -86,13 +87,88 @@ class GameEngine:
             '10': 10, '9': 9, '8': 8, '7': 7, 
             '6': 6, '5': 5, '4': 4, '3': 3, '2': 2
         }
+
+        # 1. Identify unique suits present in the hand
+        present_suits = set()
+        for card_name in card_list:
+            try:
+                suit = card_name.split('-')[0]
+                present_suits.add(suit)
+            except:
+                continue
+
+        # 2. Group suits by color
+        red_suits = [s for s in ['Harten', 'Heart', 'Ruiten', 'Diamond'] if s in present_suits]
+        black_suits = [s for s in ['Klaveren', 'Club', 'Schuppen', 'Spade'] if s in present_suits]
         
+        # Unique normalized suits for each color (to handle both EN/NL names if mixed)
+        def normalize_suit(s):
+            if s in ['Harten', 'Heart']: return 'H'
+            if s in ['Ruiten', 'Diamond']: return 'D'
+            if s in ['Klaveren', 'Club']: return 'C'
+            if s in ['Schuppen', 'Spade']: return 'S'
+            return s
+
+        unique_red = []
+        seen_red = set()
+        for s in red_suits:
+            norm = normalize_suit(s)
+            if norm not in seen_red:
+                unique_red.append(s)
+                seen_red.add(norm)
+        
+        unique_black = []
+        seen_black = set()
+        for s in black_suits:
+            norm = normalize_suit(s)
+            if norm not in seen_black:
+                unique_black.append(s)
+                seen_black.add(norm)
+
+        # 3. Interleave red and black
+        interleaved_suits = []
+        i, j = 0, 0
+        # Start with the color that has more suits, or red if equal
+        if len(unique_black) > len(unique_red):
+            while i < len(unique_black) or j < len(unique_red):
+                if i < len(unique_black):
+                    interleaved_suits.append(unique_black[i])
+                    i += 1
+                if j < len(unique_red):
+                    interleaved_suits.append(unique_red[j])
+                    j += 1
+        else:
+            while i < len(unique_red) or j < len(unique_black):
+                if i < len(unique_red):
+                    interleaved_suits.append(unique_red[i])
+                    i += 1
+                if j < len(unique_black):
+                    interleaved_suits.append(unique_black[j])
+                    j += 1
+
+        # 4. Define dynamic suit rank based on interleaved order
+        suit_ranking = {suit: idx for idx, suit in enumerate(interleaved_suits)}
+        
+        # Add EN/NL aliases for the ranking
+        aliases = {
+            'Heart': 'Harten', 'Harten': 'Heart',
+            'Diamond': 'Ruiten', 'Ruiten': 'Diamond',
+            'Club': 'Klaveren', 'Klaveren': 'Club',
+            'Spade': 'Schuppen', 'Schuppen': 'Spade'
+        }
+        
+        final_ranking = {}
+        for s, rank in suit_ranking.items():
+            final_ranking[s] = rank
+            if s in aliases:
+                final_ranking[aliases[s]] = rank
+
         def sort_key(card_name):
             try:
                 suit, rank = card_name.split('-')
-                s_val = suit_order.get(suit, 99)
+                s_val = final_ranking.get(suit, 99)
                 r_val = rank_order.get(rank.lower(), 0)
-                return (s_val, -r_val) # Ascending suit, Descending rank
+                return (s_val, -r_val)
             except:
                 return (99, 0)
                 
@@ -101,7 +177,24 @@ class GameEngine:
     def start_new_round(self):
         """Start a new round with traditional dealing logic"""
         # Determine dealer
-        dealer_position = self.game.current_round % 4
+        if self.game.current_round == 0:
+            dealer_position = 0
+        else:
+            # Check if everyone passed in the previous round
+            prev_round = GameRound.query.filter_by(
+                game_id=self.game_id, 
+                round_number=self.game.current_round
+            ).first()
+            
+            if prev_round and prev_round.winning_bid == 'Pas':
+                # Same dealer if everyone passed
+                dealer_position = prev_round.dealer_position
+            elif prev_round:
+                # Next dealer if round was played
+                dealer_position = (prev_round.dealer_position + 1) % 4
+            else:
+                # Fallback for unexpected state
+                dealer_position = self.game.current_round % 4
         
         # Traditional deck handling
         if self.game.current_round == 0 or not self.game.deck_order:
@@ -340,24 +433,6 @@ class GameEngine:
         flag_modified(current_round, "bids")
         db.session.commit()
         
-        # Instant wins
-        if bid in ['Solo Slim', 'Miserie', 'Abondance', 'Open Miserie']:
-            current_round.winning_bid = bid
-            current_round.bidder_id = player_id
-            current_round.phase = 'playing'
-            current_round.current_trick = 0
-            
-            # Initialize first trick
-            first_trick = Trick(
-                round_id=current_round.id,
-                trick_number=0,
-                leader_id=self._get_expected_leader_id(current_round, 0),
-                cards_played=[]
-            )
-            db.session.add(first_trick)
-            db.session.commit()
-            return {'status': 'bid_won', 'bid': bid}
-            
         # Check if bidding is complete (4 bids)
         if len(bids) == 4:
             # Count Non-Pass
@@ -711,6 +786,18 @@ class GameEngine:
                 all_ids = [p.id for p in Player.query.filter_by(game_id=self.game_id).all()]
                 partner_ids = [pid for pid in all_ids if pid != player_id and pid != current_round.bidder_id]
 
+        is_miserie = current_round.winning_bid in ['Miserie', 'Open Miserie']
+        is_partner_winning = False
+        
+        # Determine if partner is winning (basic check for all AI levels)
+        if current_trick:
+            # Filter out None cards from current_trick for safety
+            clean_trick_cards = [cp for cp in trick.cards_played if self._parse_card(cp['card_name'])]
+            if clean_trick_cards:
+                winning_id = self._determine_trick_winner(clean_trick_cards, current_round.trump_suit)
+                if winning_id in partner_ids:
+                    is_partner_winning = True
+
         try:
             # Calculate context for Hard AI: played cards and player voids
             played_cards = []
@@ -744,16 +831,6 @@ class GameEngine:
                         if trick_led_suit not in player_voids[p_id]:
                             player_voids[p_id].append(trick_led_suit)
 
-            # Determine if partner is winning
-            is_partner_winning = False
-            if current_trick:
-                # Filter out None cards from current_trick for safety
-                clean_trick_cards = [cp for cp in trick.cards_played if self._parse_card(cp['card_name'])]
-                if clean_trick_cards:
-                    winning_id = self._determine_trick_winner(clean_trick_cards, current_round.trump_suit)
-                    if winning_id in partner_ids:
-                        is_partner_winning = True
-
             ai = AIPlayer(difficulty=player.ai_difficulty)
             card = ai.select_card(
                 hand, 
@@ -768,9 +845,15 @@ class GameEngine:
             )
         except Exception as e:
             # Fallback to basic AI selection to prevent game freeze
-            # In a real app we would log this to a proper logger
-            ai = AIPlayer(difficulty='medium') # Fallback to medium
-            card = ai.select_card(hand, current_trick, trump_suit, led_suit, is_partner_winning=False)
+            ai = AIPlayer(difficulty=player.ai_difficulty)
+            card = ai.select_card(
+                hand, 
+                current_trick, 
+                trump_suit, 
+                led_suit, 
+                is_partner_winning=is_partner_winning,
+                is_miserie=is_miserie
+            )
         
         # Find the card name in the original hand list that matches the selected card
         for name, hand_card in zip(hand_names, hand):

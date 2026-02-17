@@ -352,7 +352,14 @@ function renderGameState() {
                 if (pInfo) {
                     const bubble = document.createElement('div');
                     bubble.className = 'bid-bubble';
-                    bubble.textContent = gameState.round.winning_bid;
+
+                    // Show 'Mee' for partner in 'Vraag' contract
+                    let badgeText = gameState.round.winning_bid;
+                    if (pid === gameState.round.partner_id && gameState.round.winning_bid === 'Vraag') {
+                        badgeText = 'Mee';
+                    }
+
+                    bubble.textContent = badgeText;
                     pInfo.appendChild(bubble);
                     pInfo.style.position = 'relative';
                 }
