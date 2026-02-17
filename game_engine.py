@@ -16,6 +16,71 @@ from ai_player import AIPlayer
 class GameEngine:
     """Manages game state and flow"""
     
+    @staticmethod
+    def get_statistics():
+        """
+        Aggregate game statistics across all completed games and rounds.
+        """
+        games = Game.query.all()
+        # Filter for completed rounds to get contract stats
+        rounds = GameRound.query.filter(GameRound.phase == 'completed', GameRound.winning_bid != 'Pas').all()
+        
+        total_games = len(games)
+        completed_games_count = Game.query.filter_by(status='completed').count()
+        
+        # Contract frequency
+        contract_stats = {}
+        for r in rounds:
+            bid = r.winning_bid
+            if bid:
+                contract_stats[bid] = contract_stats.get(bid, 0) + 1
+                
+        # Player performance (Total points and Wins)
+        # We group by player name to aggregate across different game sessions
+        player_stats = {} # {name: {points: 0, wins: 0, games: 0}}
+        
+        for game in games:
+            game_players = Player.query.filter_by(game_id=game.id).all()
+            game_scores = {} # {player_id: total_points}
+            
+            for p in game_players:
+                # Sum points for this player in this game
+                total_p = db.session.query(db.func.sum(Score.points)).filter_by(game_id=game.id, player_id=p.id).scalar() or 0
+                game_scores[p.id] = total_p
+                
+                if p.name not in player_stats:
+                    player_stats[p.name] = {'points': 0, 'wins': 0, 'games': 0}
+                player_stats[p.name]['points'] += total_p
+                player_stats[p.name]['games'] += 1
+            
+            if game_scores:
+                # Determine winner of this game
+                winner_id = max(game_scores, key=game_scores.get)
+                winner = Player.query.get(winner_id)
+                if winner:
+                   player_stats[winner.name]['wins'] += 1
+                        
+        # Sort players by wins, then points
+        sorted_players = []
+        for name, stats in player_stats.items():
+            sorted_players.append({
+                'name': name,
+                'wins': stats['wins'],
+                'points': stats['points'],
+                'avg_points': round(stats['points'] / stats['games'], 1) if stats['games'] > 0 else 0,
+                'games': stats['games']
+            })
+        
+        sorted_players.sort(key=lambda x: (x['wins'], x['points']), reverse=True)
+        
+        return {
+            'total_games': total_games,
+            'completed_games': completed_games_count,
+            'contracts': contract_stats,
+            'players': sorted_players
+        }
+
+    
     def __init__(self, game_id):
         """Initialize game engine for a specific game"""
         self.game_id = game_id
@@ -197,8 +262,8 @@ class GameEngine:
                 dealer_position = self.game.current_round % 4
         
         # Traditional deck handling
-        if self.game.current_round == 0 or not self.game.deck_order:
-            # First round: random shuffle
+        if self.game.current_round == 0 or not self.game.deck_order or len(self.game.deck_order) < 52:
+            # First round or incomplete deck: random shuffle
             deck = Deck.full_deck()
             deck.shuffle()
             self.game.deck_order = [f"{c.suit.name}-{c.rank.name}" for c in deck.cards]
@@ -869,6 +934,8 @@ class GameEngine:
 
             ai = AIPlayer(difficulty=player.ai_difficulty)
             card = ai.select_card(
+                player_id,
+                current_round.bidder_id,
                 hand, 
                 current_trick, 
                 trump_suit, 
@@ -883,6 +950,8 @@ class GameEngine:
             # Fallback to basic AI selection to prevent game freeze
             ai = AIPlayer(difficulty=player.ai_difficulty)
             card = ai.select_card(
+                player_id,
+                current_round.bidder_id,
                 hand, 
                 current_trick, 
                 trump_suit, 
@@ -1088,8 +1157,22 @@ class GameEngine:
             if trick.cards_played:
                 for play in trick.cards_played:
                     all_cards.append(play['card_name'])
+                    
+        # If the round ended early (e.g. Miserie loss), collect remaining cards from hands
+        if len(all_cards) < 52:
+            # Get all players for this game
+            game_players = Player.query.filter_by(game_id=self.game_id).all()
+            for p in game_players:
+                hand = game_round.hands.get(str(p.id), [])
+                for card_name in hand:
+                    all_cards.append(card_name)
                 
         # Update game deck order for next round
-        self.game.deck_order = all_cards
-        flag_modified(self.game, "deck_order")
+        if len(all_cards) == 52:
+            self.game.deck_order = all_cards
+            flag_modified(self.game, "deck_order")
+        else:
+            # Something went wrong, reset deck order to force random shuffle next round
+            self.game.deck_order = None
+            
         db.session.commit()

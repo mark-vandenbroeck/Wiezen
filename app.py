@@ -60,6 +60,19 @@ def game(game_id):
     return render_template('game.html', game=game, players=players, players_json=players_dict)
 
 
+@app.route('/stats')
+def stats():
+    """Statistics dashboard page"""
+    return render_template('stats.html')
+
+
+@app.route('/api/stats')
+def api_stats():
+    """Get aggregated statistics"""
+    stats_data = GameEngine.get_statistics()
+    return jsonify(stats_data)
+
+
 @app.route('/api/game/<int:game_id>/state')
 def game_state(game_id):
     """Get current game state"""

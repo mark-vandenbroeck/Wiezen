@@ -13,12 +13,14 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
 - **Resilient Game Loop**: Automatisch herstel bij verbindingsproblemen of verbreken van de verbinding (bijv. na sleep mode).
 - **Slimme Sortering**: Kaarten in de hand worden nu gesorteerd met interleaved kleuren (Rood-Zwart-Rood-Zwart) voor betere leesbaarheid.
 - **Verbindingsindicator**: Visuele feedback via een status indicator als de server onbereikbaar is.
+- **Statistieken Dashboard**: Uitgebreid overzicht van gewonnen spellen, contract frequenties en speler ranglijsten.
+- **Geluidseffecten**: Subtiele geluiden voor delen, kaarten spelen en slagen winnen (gegenereerd via Web Audio API, geen externe bestanden nodig).
 
 ## Technologie Stack
 
 - **Backend**: Python 3, Flask, SQLAlchemy
 - **Database**: SQLite
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript
+- **Frontend**: HTML5, CSS3, Vanilla JavaScript, Chart.js (voor statistieken)
 - **Kaarten**: Custom SVG generatie
 
 ## Installatie
@@ -55,6 +57,7 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
    - **Moeilijk**: Geavanceerde strategie met kaarten tellen (onthoudt hoge kaarten) en void tracking (exploiteert kleuren waar tegenstanders vrij van zijn).
 4. Optioneel: Activeer debug modus om alle kaarten te zien
 5. Klik op "Start Spel"
+6. **Statistieken**: Klik op "Bekijk Statistieken" op de homepagina om je prestaties te zien.
 
 ### Spelen
 
@@ -101,6 +104,7 @@ De AI op het "Moeilijk" niveau gebruikt de volgende technieken:
 - **Kaarten Tellen**: De AI onthoudt welke Azen en Heren zijn gespeeld om te weten of hun eigen kaarten nu "meesters" zijn.
 - **Void Tracking**: Identificeert welke suits tegenstanders niet meer hebben. De AI kan deze kleuren trekken om tegenstanders te dwingen hun troeven te gebruiken.
 - **Partnerschap Logica**: De AI herkent teamgenoten en speelt defensief/ondersteunend (bijv. laag spelen als de partner de slag al wint).
+- **Miserie Verdediging**: De AI speelt slim tegen Miserie door hoge kaarten weg te gooien als de Miserie-speler in een slag al "veilig" (laag) heeft gespeeld.
 - **Biedingsbewustzijn**: De AI volgt de strikte hiërarchie en zal niet proberen ongeldige biedingen te doen.
 
 ## Ontwikkeling
@@ -108,15 +112,12 @@ De AI op het "Moeilijk" niveau gebruikt de volgende technieken:
 ### Testen
 Er zijn unit tests beschikbaar voor de kernfunctionaliteiten:
 ```bash
-pytest tests/test_troel.py
-pytest tests/test_bidding_hierarchy.py
+pytest tests/
 ```
 
 ## Toekomstige Uitbreidingen
 
-- Spel geschiedenis en statistieken
 - Multiplayer ondersteuning
-- Geluid effecten
 
 ## Licentie
 

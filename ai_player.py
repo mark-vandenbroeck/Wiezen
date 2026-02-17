@@ -4,8 +4,8 @@ Implements rule-based strategies with three difficulty levels
 """
 
 import random
-from arch.cards.suits import Suit
-from arch.cards.ranks import Rank
+from arch.cards.suits import Suit, suits
+from arch.cards.ranks import Rank, ranks
 from arch.cards.cards import Card
 
 
@@ -70,10 +70,7 @@ class AIPlayer:
         elif self.difficulty == 'hard':
             if is_open_miserie_candidate and random.random() < 0.2: bid = 'Open Miserie'
             else:
-                best_suit = max(suit_counts, key=suit_counts.get)
-                suit_highs = sum(1 for c in hand if c.suit == best_suit and c.rank in [Rank.Ace, Rank.King])
-                if max_suit_len >= 7 and suit_highs >= 1: bid = 'Abondance'
-                else: bid = self._hard_bid(hand, trump_suit, num_trumps, num_aces, num_high_cards, vraag_bid)
+                bid = self._hard_bid(hand, trump_suit, num_trumps, num_aces, num_high_cards, vraag_bid)
         else:  # medium
             if is_open_miserie_candidate and random.random() < 0.1: bid = 'Open Miserie'
             elif max_suit_len >= 8: bid = 'Abondance'
@@ -100,6 +97,74 @@ class AIPlayer:
             'Abondance': 2, 'Miserie': 3, 'Open Miserie': 4, 'Solo Slim': 5
         }
         return values.get(bid, 0)
+
+    def _get_unknown_cards(self, hand, played_cards):
+        """Identify cards that are not in hand and not yet played"""
+        all_cards = []
+        for suit in suits:
+            for rank in ranks:
+                all_cards.append(Card(suit, rank))
+        
+        known_cards = set(c.name for c in hand)
+        for c in played_cards:
+            known_cards.add(c.name)
+            
+        return [c for c in all_cards if c.name not in known_cards]
+
+    def calculate_card_probabilities(self, hand, played_cards, player_voids, trump_suit):
+        """
+        Estimate the probability of each card in hand winning a trick.
+        """
+        unknown_cards = self._get_unknown_cards(hand, played_cards)
+        probs = {}
+        
+        for card in hand:
+            # Base probability logic
+            # 1. Higher cards in the same suit that are still out there
+            higher_unknowns = [c for c in unknown_cards 
+                              if c.suit == card.suit and c.rank.value > card.rank.value]
+            
+            # 2. Trumps that are still out there (if this card is not a trump)
+            if card.suit != trump_suit:
+                trumps_out = [c for c in unknown_cards if c.suit == trump_suit]
+            else:
+                trumps_out = []
+                
+            # Total potential "killers" for this card
+            killers = len(higher_unknowns) + len(trumps_out)
+            
+            # Very simple probability estimation: 
+            
+            if not unknown_cards:
+                probs[card.name] = 1.0
+                continue
+                
+            # Adjust killers based on voids
+            void_adjustment = 0
+            if card.suit != trump_suit:
+                for p_id, voids in player_voids.items():
+                    if card.suit in voids:
+                        trumps_this_player_might_have = len(trumps_out) / 3
+                        void_adjustment += trumps_this_player_might_have
+
+            adjusted_killers = killers + void_adjustment
+            # Number of cards other players have
+            others_cards_count = 39 - len(played_cards)
+            if others_cards_count <= 0: others_cards_count = 1
+            
+            prob = max(0.0, 1.0 - (adjusted_killers / others_cards_count))
+            
+            # Special case for Aces: they are 1.0 if no trumps can be played
+            if card.rank == Rank.Ace and len(trumps_out) == 0:
+                prob = 1.0
+                
+            # Add a tiny rank-based bonus to break ties (0.001 to 0.013)
+            # This ensures Ace > King even if both have 0 killers.
+            prob += (card.rank.value / 1000.0)
+            
+            probs[card.name] = prob
+            
+        return probs
 
     def choose_alleen_or_pas(self, hand, trump_card):
         """Decide whether to go Alleen if Vraag wasn't joined"""
@@ -145,53 +210,103 @@ class AIPlayer:
         
         return 'Pas'
     
+    def _simulate_hand_performance(self, hand, trump_suit, simulations=40):
+        """
+        Perform quick simulations to estimate hand strength.
+        Returns average tricks won.
+        """
+        unknown_cards = self._get_unknown_cards(hand, [])
+        total_tricks = 0
+        
+        for _ in range(simulations):
+            # Shuffle unknown cards and distribute to other 3 players
+            random.shuffle(unknown_cards)
+            other_hands = [
+                unknown_cards[0:13],
+                unknown_cards[13:26],
+                unknown_cards[26:39]
+            ]
+            
+            sim_tricks = 0
+            hand_copy = sorted(hand, key=lambda c: c.rank.value, reverse=True)
+            
+            # Simple trick-by-trick simulation
+            # We lead our best cards. Since we don't know who has what,
+            # we just check if any player can beat our lead.
+            for card in hand_copy:
+                can_be_beaten = False
+                for other_hand in other_hands:
+                    # Can they follow suit with higher?
+                    higher_in_suit = [c for c in other_hand if c.suit == card.suit and c.rank.value > card.rank.value]
+                    if higher_in_suit:
+                        can_be_beaten = True
+                        other_hand.remove(max(higher_in_suit, key=lambda c: c.rank.value))
+                        break
+                    
+                    # If not, can they trump?
+                    if card.suit != trump_suit:
+                        trumps = [c for c in other_hand if c.suit == trump_suit]
+                        if trumps:
+                            # They might trump if they are void in lead suit
+                            # For simulation, we assume they are void with some probability
+                            # if they don't have the suit.
+                            has_suit = any(c.suit == card.suit for c in other_hand)
+                            if not has_suit:
+                                can_be_beaten = True
+                                other_hand.remove(min(trumps, key=lambda c: c.rank.value))
+                                break
+                
+                if not can_be_beaten:
+                    sim_tricks += 1
+            
+            total_tricks += sim_tricks
+            
+        return total_tricks / simulations
+
     def _hard_bid(self, hand, trump_suit, num_trumps, num_aces, num_high_cards, vraag_bid):
-        """Hard AI: Advanced strategy with suit analysis"""
-        # Consider Solo Slim (near perfect hand)
-        if num_trumps >= 9 and num_aces >= 4:
+        """Hard AI: Advanced strategy with multi-suit Monte Carlo simulation"""
+        # Evaluate performance for EACH possible trump suit
+        suit_performances = {}
+        for suit in suits:
+            suit_performances[suit] = self._simulate_hand_performance(hand, suit, simulations=30)
+        
+        # Best performance and its suit
+        best_suit = max(suit_performances, key=suit_performances.get)
+        best_expected_tricks = suit_performances[best_suit]
+        
+        # Current revealed trump performance (for Vraag/Mee)
+        revealed_trump_expected_tricks = suit_performances.get(trump_suit, 0)
+
+        # 1. Consider Solo Slim (near perfect hand in ANY suit)
+        if best_expected_tricks >= 12.5:
             return 'Solo Slim'
             
-        # Analyze suit distribution
-        suit_counts = {}
-        for suit in [Suit.Heart, Suit.Diamond, Suit.Club, Suit.Spade]:
-            suit_counts[suit] = sum(1 for card in hand if card.suit == suit)
-        
-        # Count winners (Aces and Kings in non-trump suits)
-        potential_winners = 0
-        for card in hand:
-            if card.suit != trump_suit:
-                if card.rank == Rank.Ace:
-                    potential_winners += 1
-                elif card.rank == Rank.King and suit_counts[card.suit] >= 3:
-                    potential_winners += 0.5
-        
-        # Consider Mee strategically
+        # 2. Consider Abondance (if we have a suit that gives 9+ tricks)
+        if best_expected_tricks >= 9.0:
+            # Note: The actual trump suit will be chosen if we win Abondance
+            return 'Abondance'
+
+        # 3. Consider Mee/Vraag based on revealed trump
         if vraag_bid:
-            if num_trumps >= 4 and (num_aces >= 2 or potential_winners >= 2):
-                return 'Mee'
-            elif num_trumps >= 5:
+            if revealed_trump_expected_tricks >= 4.5:
                 return 'Mee'
         
-        # Consider Vraag with good hand
-        if num_trumps >= 5 and num_high_cards >= 6:
-            return 'Vraag'
-        elif num_trumps >= 6 and num_aces >= 1:
+        if revealed_trump_expected_tricks >= 5.5:
             return 'Vraag'
         
-        # Consider Miserie with weak hand
-        if num_high_cards <= 1 and num_trumps <= 2:
-            # Check if we have mostly low cards
-            low_cards = sum(1 for card in hand if card.rank in [Rank.Two, Rank.Three, Rank.Four, Rank.Five])
-            if low_cards >= 8 and random.random() < 0.15:
-                return 'Miserie'
+        # 4. Consider Miserie with weak hand (all suits perform poorly)
+        if best_expected_tricks <= 1.5 and num_high_cards <= 1:
+            return 'Miserie'
         
         return 'Pas'
     
-    def select_card(self, hand, current_trick, trump_suit, led_suit, is_partner_winning=False, is_miserie=False, played_cards=None, player_voids=None, partner_ids=None):
+    def select_card(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, is_partner_winning=False, is_miserie=False, played_cards=None, player_voids=None, partner_ids=None):
         """
         Select a card to play
         
         Args:
+            player_id: ID of the player currently playing
+            bidder_id: ID of the contract bidder
             hand: List of Card objects in player's hand
             current_trick: List of (player_id, Card) tuples played so far
             trump_suit: Current trump suit
@@ -206,7 +321,7 @@ class AIPlayer:
             Card to play
         """
         if is_miserie:
-            return self._miserie_card_selection(hand, current_trick, trump_suit, led_suit)
+            return self._miserie_card_selection(player_id, bidder_id, hand, current_trick, trump_suit, led_suit)
             
         if self.difficulty == 'easy':
             return self._easy_card_selection(hand, current_trick, trump_suit, led_suit)
@@ -215,7 +330,7 @@ class AIPlayer:
         else:  # medium
             return self._medium_card_selection(hand, current_trick, trump_suit, led_suit, is_partner_winning)
 
-    def _miserie_card_selection(self, hand, current_trick, trump_suit, led_suit):
+    def _miserie_card_selection(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit):
         """Strategic play for Miserie: AVOD winning tricks"""
         if led_suit is None:
             # Leading: play relatively high card of a "safe" suit?
@@ -239,6 +354,16 @@ class AIPlayer:
         if same_suit:
             # Determine currently winning card in trick
             winning_card = self._get_current_winning_card(current_trick, trump_suit)
+            
+            # IMPROVEMENT: If we are a defender, and the miserie player has already played
+            # and is NOT winning the trick, we should discard our HIGHEST card of this suit.
+            if player_id != bidder_id:
+                bidder_play = next((card for pid, card in current_trick if pid == bidder_id), None)
+                if bidder_play:
+                    # Is someone else winning with a higher card than the bidder?
+                    if winning_card != bidder_play:
+                        # Bidder is safe, discard highest
+                        return max(same_suit, key=lambda c: c.rank.value)
             
             # Strategy: play the HIGHEST card that is still LOWER than the winning card
             # This gets rid of high cards safely.
@@ -328,27 +453,24 @@ class AIPlayer:
         played_cards = played_cards or []
         player_voids = player_voids or {}
         
-        # Helper: Is a card a "guaranteed winner" in its suit?
-        def is_sure_winner(card):
-            if card.rank == Rank.Ace:
-                return True
-            # Check if all higher cards have been played
-            higher_ranks = [r for r in Rank if r.value > card.rank.value]
-            for r in higher_ranks:
-                higher_card_played = any(c.suit == card.suit and c.rank == r for c in played_cards)
-                # Also check if WE have the higher card in hand
-                higher_card_in_hand = any(c.suit == card.suit and c.rank == r for c in hand)
-                if not (higher_card_played or higher_card_in_hand):
-                    return False
-            return True
+        # Calculate probabilities for all cards in hand
+        probs = self.calculate_card_probabilities(hand, played_cards, player_voids, trump_suit)
 
         if led_suit is None:
             # Leading: strategic choice
             
-            # 1. Lead "Sure Winners" (Aces or Kings if Ace is gone)
+            # 1. Lead "Near-Sure Winners" (Confidence > 90%)
+            best_lead = None
+            max_prob = 0
             for card in hand:
-                if is_sure_winner(card) and card.suit != trump_suit:
-                    return card
+                if card.suit != trump_suit:
+                    p = probs.get(card.name, 0)
+                    if p > 0.9 and p > max_prob:
+                        max_prob = p
+                        best_lead = card
+            
+            if best_lead:
+                return best_lead
             
             # 2. Lead Trump if we have many to clear them
             trumps = [card for card in hand if card.suit == trump_suit]
@@ -357,14 +479,10 @@ class AIPlayer:
                 return max(trumps, key=lambda c: c.rank.value)
             
             # 3. Void Exploitation: 
-            # If an opponent is void in a suit, leading that suit can be good to force them to trump.
             opponent_ids = []
             if partner_ids is not None:
-                # We need to know our own ID to be 100% sure, but we can assume anyone NOT in partner_ids 
-                # (and not us) is an opponent. However, partner_ids already excludes us.
                 opponent_ids = [p_id for p_id in player_voids.keys() if p_id not in partner_ids]
             
-            # Analyze suit counts in hand
             suit_counts = {}
             for card in hand:
                 suit_counts[card.suit] = suit_counts.get(card.suit, 0) + 1
@@ -377,10 +495,12 @@ class AIPlayer:
                             suit_cards = [c for c in hand if c.suit == suit]
                             return min(suit_cards, key=lambda c: c.rank.value)
             
-            # Lead with high card
-            high_cards = [card for card in hand if card.rank in [Rank.King, Rank.Queen, Rank.Jack]]
-            if high_cards:
-                return max(high_cards, key=lambda c: c.rank.value)
+            # 4. Lead with card having highest win probability
+            if probs:
+                best_card_str = max(probs, key=probs.get)
+                for c in hand:
+                    if c.name == best_card_str:
+                        return c
             
             return random.choice(hand)
         
@@ -423,11 +543,12 @@ class AIPlayer:
             
             # If we can't overtrump, don't waste a trump unless forced
         
-        # Discard lowest non-trump card
+        # Discard lowest probability winner non-trump card
         # EXCEPT: discard a suit where we want to become void!
         non_trumps = [card for card in hand if card.suit != trump_suit]
         if non_trumps:
-            return min(non_trumps, key=lambda c: c.rank.value)
+            # Sort by probability, then by rank
+            return min(non_trumps, key=lambda c: (probs.get(c.name, 0), c.rank.value))
         
         return min(hand, key=lambda c: c.rank.value)
     

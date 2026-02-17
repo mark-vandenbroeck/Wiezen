@@ -1,0 +1,160 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.4, pytest-7.4.4, pluggy-1.0.0
+rootdir: /Users/mark/Documents/Python/Wiezen
+plugins: anyio-4.2.0
+collected 5 items
+
+tests/test_bidding_hierarchy.py FFFFF
+
+=================================== FAILURES ===================================
+________________________ test_overbidding_higher_level _________________________
+
+app = <Flask 'app'>
+test_game = (<Game 1>, [<Player 1>, <Player 2>, <Player 3>, <Player 4>])
+
+    def test_overbidding_higher_level(app, test_game):
+        game, players = test_game
+        engine = GameEngine(game.id)
+    
+        # Setup a round in bidding phase
+        round = GameRound(
+            game_id=game.id,
+            round_number=1,
+            dealer_position=3, # Player 4 deals, Player 1 starts
+            hands={},
+            phase='bidding'
+        )
+        db.session.add(round)
+        db.session.commit()
+    
+        # 1. Player 1 (pos 0) bids Vraag (Val 1)
+        engine.process_bid(players[0].id, 'Vraag')
+    
+        # 2. Player 2 (pos 1) bids Abondance (Val 2) - Higher, should be allowed
+        res = engine.process_bid(players[1].id, 'Abondance')
+>       assert 'error' not in res
+E       AssertionError: assert 'error' not in {'error': 'Not in bidding phase'}
+
+tests/test_bidding_hierarchy.py:26: AssertionError
+_________________ test_bidding_hierarchy_winner_determination __________________
+
+app = <Flask 'app'>
+test_game = (<Game 1>, [<Player 1>, <Player 2>, <Player 3>, <Player 4>])
+
+    def test_bidding_hierarchy_winner_determination(app, test_game):
+        """Test that the FIRST player who bid at the highest level wins if levels are tied >= 2"""
+        game, players = test_game
+        engine = GameEngine(game.id)
+    
+        round = GameRound(game_id=game.id, round_number=1, dealer_position=3, phase='bidding')
+        db.session.add(round)
+        db.session.commit()
+    
+        engine.process_bid(players[0].id, 'Abondance') # Level 2
+        engine.process_bid(players[1].id, 'Abondance') # Level 2, allowed (not lower) but doesn't take over
+        engine.process_bid(players[2].id, 'Pas')
+        engine.process_bid(players[3].id, 'Pas')
+    
+        db.session.refresh(round)
+>       assert round.winning_bid == 'Abondance'
+E       AssertionError: assert None == 'Abondance'
+E        +  where None = <GameRound 1>.winning_bid
+
+tests/test_bidding_hierarchy.py:61: AssertionError
+____________________________ test_level_1_vraag_mee ____________________________
+
+app = <Flask 'app'>
+test_game = (<Game 1>, [<Player 1>, <Player 2>, <Player 3>, <Player 4>])
+
+    def test_level_1_vraag_mee(app, test_game):
+        game, players = test_game
+        engine = GameEngine(game.id)
+    
+        round = GameRound(game_id=game.id, round_number=1, dealer_position=3, phase='bidding')
+        db.session.add(round)
+        db.session.commit()
+    
+        engine.process_bid(players[0].id, 'Vraag')
+        engine.process_bid(players[1].id, 'Pas')
+        engine.process_bid(players[2].id, 'Mee')
+        engine.process_bid(players[3].id, 'Pas')
+    
+        db.session.refresh(round)
+>       assert round.winning_bid == 'Vraag'
+E       AssertionError: assert None == 'Vraag'
+E        +  where None = <GameRound 1>.winning_bid
+
+tests/test_bidding_hierarchy.py:78: AssertionError
+_____________________________ test_level_1_alleen ______________________________
+
+app = <Flask 'app'>
+test_game = (<Game 1>, [<Player 1>, <Player 2>, <Player 3>, <Player 4>])
+
+    def test_level_1_alleen(app, test_game):
+        game, players = test_game
+        engine = GameEngine(game.id)
+    
+        round = GameRound(game_id=game.id, round_number=1, dealer_position=3, phase='bidding')
+        db.session.add(round)
+        db.session.commit()
+    
+        engine.process_bid(players[0].id, 'Vraag')
+        engine.process_bid(players[1].id, 'Pas')
+        engine.process_bid(players[2].id, 'Alleen') # Same level 1
+        engine.process_bid(players[3].id, 'Pas')
+    
+        db.session.refresh(round)
+>       assert round.winning_bid == 'Alleen'
+E       AssertionError: assert None == 'Alleen'
+E        +  where None = <GameRound 1>.winning_bid
+
+tests/test_bidding_hierarchy.py:96: AssertionError
+_________________________ test_miserie_over_abondance __________________________
+
+app = <Flask 'app'>
+test_game = (<Game 1>, [<Player 1>, <Player 2>, <Player 3>, <Player 4>])
+
+    def test_miserie_over_abondance(app, test_game):
+        game, players = test_game
+        engine = GameEngine(game.id)
+    
+        round = GameRound(game_id=game.id, round_number=1, dealer_position=3, phase='bidding')
+        db.session.add(round)
+        db.session.commit()
+    
+        engine.process_bid(players[0].id, 'Abondance') # Level 2
+        engine.process_bid(players[1].id, 'Miserie')   # Level 3
+        engine.process_bid(players[2].id, 'Pas')
+        engine.process_bid(players[3].id, 'Pas')
+    
+        db.session.refresh(round)
+>       assert round.winning_bid == 'Miserie'
+E       AssertionError: assert None == 'Miserie'
+E        +  where None = <GameRound 1>.winning_bid
+
+tests/test_bidding_hierarchy.py:113: AssertionError
+=============================== warnings summary ===============================
+tests/test_bidding_hierarchy.py::test_overbidding_higher_level
+tests/test_bidding_hierarchy.py::test_bidding_hierarchy_winner_determination
+tests/test_bidding_hierarchy.py::test_level_1_vraag_mee
+tests/test_bidding_hierarchy.py::test_level_1_alleen
+tests/test_bidding_hierarchy.py::test_miserie_over_abondance
+  /opt/anaconda3/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:3585: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
+
+tests/test_bidding_hierarchy.py::test_overbidding_higher_level
+tests/test_bidding_hierarchy.py::test_bidding_hierarchy_winner_determination
+tests/test_bidding_hierarchy.py::test_level_1_vraag_mee
+tests/test_bidding_hierarchy.py::test_level_1_alleen
+tests/test_bidding_hierarchy.py::test_miserie_over_abondance
+  /Users/mark/Documents/Python/Wiezen/game_engine.py:22: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    self.game = Game.query.get(game_id)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_bidding_hierarchy.py::test_overbidding_higher_level - Asser...
+FAILED tests/test_bidding_hierarchy.py::test_bidding_hierarchy_winner_determination
+FAILED tests/test_bidding_hierarchy.py::test_level_1_vraag_mee - AssertionErr...
+FAILED tests/test_bidding_hierarchy.py::test_level_1_alleen - AssertionError:...
+FAILED tests/test_bidding_hierarchy.py::test_miserie_over_abondance - Asserti...
+======================== 5 failed, 10 warnings in 0.09s ========================

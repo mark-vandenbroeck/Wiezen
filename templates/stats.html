@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Wiezen - Statistieken{% endblock %}
+
+{% block content %}
+<div class="container stats-container">
+    <div class="stats-header">
+        <h1>Spelstatistieken</h1>
+        <p class="subtitle">Jouw prestaties en speloverzicht</p>
+        <a href="/" class="btn btn-secondary btn-back-home">
+            <i class="fas fa-home"></i> Terug naar Home
+        </a>
+    </div>
+
+    <div class="stats-grid">
+        <!-- Summary Cards -->
+        <div class="stats-card summary-card">
+            <h3>Totaal Spellen</h3>
+            <div class="stat-value" id="total-games">-</div>
+        </div>
+        <div class="stats-card summary-card">
+            <h3>Gewonnen Spellen</h3>
+            <div class="stat-value" id="user-wins">-</div>
+        </div>
+        <div class="stats-card summary-card">
+            <h3>Winpercentage</h3>
+            <div class="stat-value" id="win-rate">- %</div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="stats-card chart-card player-rankings">
+            <h3>Speler Ranglijst (Gewonnen Spellen)</h3>
+            <div class="chart-container">
+                <canvas id="playerChart"></canvas>
+            </div>
+        </div>
+
+        <div class="stats-card chart-card contract-frequency">
+            <h3>Meest Gespeelde Contracten</h3>
+            <div class="chart-container">
+                <canvas id="contractChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <div class="stats-card table-card full-width">
+            <h3>Wie is de beste?</h3>
+            <div class="table-responsive">
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Speler</th>
+                            <th>Gewonnen Spellen</th>
+                            <th>Totaal Punten</th>
+                            <th>Gem. Punten / Spel</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Our Stats JS -->
+<script
+    src="{{ url_for('static', path='js/stats.js') if not is_standard_flask else url_for('static', filename='js/stats.js') }}"></script>
+<script>
+    // Fallback for script path if standard flask is used
+    if (typeof stats_loaded === 'undefined') {
+        const script = document.createElement('script');
+        script.src = "/static/js/stats.js";
+        document.body.appendChild(script);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.4, pytest-7.4.4, pluggy-1.0.0
+rootdir: /Users/mark/Documents/Python/Wiezen
+plugins: anyio-4.2.0
+collected 1 item
+
+tests/test_troel.py DEBUG: engine round phase=playing, bid=Troel
+DEBUG: hand_names for 2: ['Spade-Ace', 'Heart-2', 'Heart-3', 'Heart-4', 'Heart-5', 'Heart-6', 'Heart-7', 'Heart-8', 'Heart-9', 'Heart-10', 'Heart-Jack', 'Heart-Queen', 'Heart-King']
+DEBUG: leading. bid=Troel, trick=0, trump_card=Spade-Ace
+DEBUG: valid_cards=['Spade-Ace']
+DEBUG: hand_names for 2: ['Spade-Ace', 'Heart-2', 'Heart-3', 'Heart-4', 'Heart-5', 'Heart-6', 'Heart-7', 'Heart-8', 'Heart-9', 'Heart-10', 'Heart-Jack', 'Heart-Queen', 'Heart-King']
+DEBUG: leading. bid=Troel, trick=0, trump_card=Spade-Ace
+DEBUG: hand_names for 2: ['Spade-Ace', 'Heart-2', 'Heart-3', 'Heart-4', 'Heart-5', 'Heart-6', 'Heart-7', 'Heart-8', 'Heart-9', 'Heart-10', 'Heart-Jack', 'Heart-Queen', 'Heart-King']
+DEBUG: leading. bid=Troel, trick=0, trump_card=Spade-Ace
+.
+
+=============================== warnings summary ===============================
+tests/test_troel.py::test_troel_forced_lead
+  /opt/anaconda3/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:3585: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
+
+tests/test_troel.py::test_troel_forced_lead
+  /Users/mark/Documents/Python/Wiezen/game_engine.py:23: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    self.game = Game.query.get(game_id)
+
+tests/test_troel.py::test_troel_forced_lead
+tests/test_troel.py::test_troel_forced_lead
+tests/test_troel.py::test_troel_forced_lead
+  /Users/mark/Documents/Python/Wiezen/game_engine.py:537: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    leader = Player.query.get(trick.leader_id)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 1 passed, 5 warnings in 0.03s =========================

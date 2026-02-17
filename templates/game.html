@@ -189,5 +189,6 @@
     const PLAYERS = {{ players_json | tojson }};
     const DEBUG_MODE = {{ 'true' if game.debug_mode else 'false' }};
 </script>
-<script src="{{ url_for('static', filename='js/game.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='js/SoundManager.js') }}"></script>
+<script src="{{ url_for('static', filename='js/game.js') }}?v=5"></script>
 {% endblock %}

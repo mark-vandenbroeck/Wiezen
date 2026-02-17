@@ -13,6 +13,7 @@ let consecutiveErrors = 0;
 let lastInteractionTime = Date.now();
 let aiProcessingStartTime = 0;
 let trickClearingStartTime = 0;
+let lastHandCounts = {};
 
 // Initialize game
 async function initGame() {
@@ -205,15 +206,31 @@ async function updateGameState() {
         const newStateJson = JSON.stringify(newState);
         const stateChanged = newStateJson !== lastGameStateJson;
 
-        // Check if trick completed (trick number increased)
-        if (lastTrickNum !== -1 && newState.round && newState.round.current_trick > lastTrickNum) {
-            console.log('Trick completed! Delaying clear...');
+        // Check if trick completed (trick number increased) OR round ended early
+        const roundEndedEarly = gameState && gameState.round &&
+            gameState.round.phase !== 'completed' &&
+            newState.round.phase === 'completed' &&
+            newState.round.current_trick === lastTrickNum;
+
+        if (lastTrickNum !== -1 && newState.round && (newState.round.current_trick > lastTrickNum || roundEndedEarly)) {
+            console.log('Trick or round completed! Delaying clear...');
             isTrickClearing = true;
             trickClearingStartTime = Date.now();
+
+            // If round ended early, ensure we have a "last trick" to show during delay
+            // FORCE overwrite because API might return the previous completed trick
+            if (roundEndedEarly && newState.current_trick) {
+                console.log('Round ended early: forcing last_trick to be current_trick');
+                newState.last_trick = newState.current_trick;
+            }
+
             gameState = newState;
             lastGameStateJson = newStateJson;
             lastTrickNum = gameState.round.current_trick;
             renderGameState();
+
+            // Play win sound
+            sounds.playWin();
 
             // Clear after delay and allow next turn
             setTimeout(() => {
@@ -580,6 +597,42 @@ function renderHands() {
             handEl.appendChild(cardEl);
         }
     }
+
+    // Check for dealing (cards appearing in empty hands)
+    checkForDealing();
+}
+
+/**
+ * Detect if cards were dealt (round start)
+ */
+function checkForDealing() {
+    if (!gameState || !gameState.round || !gameState.round.hands) return;
+
+    for (const player of PLAYERS) {
+        const countNow = (gameState.round.hands[player.id] || []).length;
+        const countBefore = lastHandCounts[player.id] || 0;
+
+        if (countBefore === 0 && countNow === 13) {
+            // Cards were dealt to this player. Play a sequence of sounds.
+            playDealingSequence();
+        }
+
+        lastHandCounts[player.id] = countNow;
+    }
+}
+
+let isDealingSoundPlaying = false;
+function playDealingSequence() {
+    if (isDealingSoundPlaying) return;
+    isDealingSoundPlaying = true;
+
+    // Play 4 quick deal sounds to represent the 4 players receiving cards
+    for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+            sounds.playDeal();
+            if (i === 3) isDealingSoundPlaying = false;
+        }, i * 200);
+    }
 }
 
 /**
@@ -655,6 +708,9 @@ function renderTrick() {
             const isNew = newCards.some(nc => nc.player_id === cardPlay.player_id && nc.card_name === cardPlay.card_name);
 
             if (isNew) {
+                // Play card sound
+                sounds.playCard();
+
                 // FLIP animation
                 // 1. Target (Last) position is already set by classes
                 trickArea.appendChild(cardEl);
