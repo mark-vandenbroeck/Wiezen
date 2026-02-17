@@ -303,23 +303,8 @@ function renderGameState() {
         if (playerArea) {
             let isCurrentTurn = false;
             if (gameState && gameState.round) {
-                if (gameState.round.phase === 'bidding' || gameState.round.phase === 'choosing_alleen') {
-                    isCurrentTurn = (player.id === gameState.current_bidder_id);
-                } else if (gameState.round.phase === 'playing') {
-                    const currentTrick = gameState.current_trick;
-                    const cardsPlayed = currentTrick ? (currentTrick.cards_played || []).length : 0;
-                    if (cardsPlayed < 4) {
-                        let nextPlayerId;
-                        if (cardsPlayed === 0) {
-                            nextPlayerId = currentTrick.leader_id || gameState.round.first_player_id;
-                        } else {
-                            const lastPlay = currentTrick.cards_played[cardsPlayed - 1];
-                            const lastPlayerIndex = PLAYERS.findIndex(p => p.id === lastPlay.player_id);
-                            nextPlayerId = PLAYERS[(lastPlayerIndex + 1) % 4].id;
-                        }
-                        isCurrentTurn = (player.id === nextPlayerId);
-                    }
-                }
+                const currentTurnId = getCurrentTurnPlayerId();
+                isCurrentTurn = (player.id === currentTurnId);
             }
 
             if (isCurrentTurn) {
@@ -505,6 +490,7 @@ function renderHands() {
 
         const cards = gameState.round.hands[player.id] || [];
         const isHuman = player.is_human;
+        const isHumanTurn = isHuman && (getCurrentTurnPlayerId() === player.id);
 
         // Open Miserie Reveal: bidder's hand revealed after trick 1
         let isOpenMiserieReveal = false;
@@ -516,19 +502,22 @@ function renderHands() {
 
         const showCards = isHuman || debugMode || isOpenMiserieReveal;
 
-        console.log(`Player ${player.id} cards:`, cards.length);
+        console.log(`Player ${player.id} cards: ${cards.length}, isHuman: ${isHuman}, isHumanTurn: ${isHumanTurn}`);
 
         for (const cardName of cards) {
             let cardEl;
 
             if (showCards) {
                 const { suit, rank } = parseCardName(cardName);
-                const isValid = validCards.includes(cardName);
-                // In bidding phase, validCards is empty, so isValid is false.
-                // We want cards to be visible (disabled style ok).
-                cardEl = createCardElement(suit, rank, isHuman && isValid);
 
-                if (isHuman && isValid) {
+                // Dimming logic:
+                // Only dim if it's the human's turn AND the card is unplayable.
+                // Otherwise (e.g. while waiting for AI), keep all human cards bright (clickable=true).
+                const clickable = !isHuman || !isHumanTurn || validCards.includes(cardName);
+
+                cardEl = createCardElement(suit, rank, clickable);
+
+                if (isHuman && isHumanTurn && validCards.includes(cardName)) {
                     cardEl.addEventListener('click', () => playCard(cardName));
                 }
             } else {
@@ -538,6 +527,33 @@ function renderHands() {
             handEl.appendChild(cardEl);
         }
     }
+}
+
+/**
+ * Helper to determine whose turn it is across all phases
+ * @returns {number|null} Player ID
+ */
+function getCurrentTurnPlayerId() {
+    if (!gameState || !gameState.round) return null;
+
+    const phase = gameState.round.phase;
+    if (phase === 'bidding' || phase === 'choosing_alleen') {
+        return gameState.current_bidder_id;
+    } else if (phase === 'playing') {
+        const currentTrick = gameState.current_trick;
+        const cardsPlayed = currentTrick ? (currentTrick.cards_played || []).length : 0;
+
+        if (cardsPlayed >= 4) return null;
+
+        if (cardsPlayed === 0) {
+            return currentTrick.leader_id || gameState.round.first_player_id;
+        } else {
+            const lastPlay = currentTrick.cards_played[cardsPlayed - 1];
+            const lastPlayerIndex = PLAYERS.findIndex(p => p.id === lastPlay.player_id);
+            return PLAYERS[(lastPlayerIndex + 1) % 4].id;
+        }
+    }
+    return null;
 }
 
 
