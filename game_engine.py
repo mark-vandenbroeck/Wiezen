@@ -21,44 +21,42 @@ class GameEngine:
         """
         Aggregate game statistics across all completed games and rounds.
         """
-        games = Game.query.all()
-        # Filter for completed rounds to get contract stats
-        rounds = GameRound.query.filter(GameRound.phase == 'completed', GameRound.winning_bid != 'Pas').all()
-        
-        total_games = len(games)
-        completed_games_count = Game.query.filter_by(status='completed').count()
+        # Count completed rounds (not games, as a game is a session)
+        completed_rounds_count = GameRound.query.filter(GameRound.phase == 'completed', GameRound.winning_bid != 'Pas').count()
         
         # Contract frequency
+        rounds = GameRound.query.filter(GameRound.phase == 'completed', GameRound.winning_bid != 'Pas').all()
         contract_stats = {}
         for r in rounds:
             bid = r.winning_bid
             if bid:
                 contract_stats[bid] = contract_stats.get(bid, 0) + 1
                 
-        # Player performance (Total points and Wins)
-        # We group by player name to aggregate across different game sessions
-        player_stats = {} # {name: {points: 0, wins: 0, games: 0}}
+        # Player performance
+        # We need to aggregate points and wins from SCORES
+        # Score table tracks points per round per player
         
-        for game in games:
-            game_players = Player.query.filter_by(game_id=game.id).all()
-            game_scores = {} # {player_id: total_points}
+        # 1. Get all player names (to normalize)
+        # 2. Sum points
+        # 3. Count wins (positive score in a round is a "win" for that player?) 
+        #    Actually, in Wiezen, multiple players can win (e.g. 3 defenders). 
+        #    Usually "Time Won" means "I won the round" -> implies I was the bidder/partner and we made it, OR I was defender and we set them?
+        #    Let's define "Win" as getting positive points in a round.
+        
+        player_stats = {} # {name: {points: 0, wins: 0, rounds_played: 0}}
+        
+        # Get all scores joined with players to get names
+        results = db.session.query(Player.name, Score.points, Score.round_number)\
+            .join(Score, Player.id == Score.player_id).all()
             
-            for p in game_players:
-                # Sum points for this player in this game
-                total_p = db.session.query(db.func.sum(Score.points)).filter_by(game_id=game.id, player_id=p.id).scalar() or 0
-                game_scores[p.id] = total_p
-                
-                if p.name not in player_stats:
-                    player_stats[p.name] = {'points': 0, 'wins': 0, 'games': 0}
-                player_stats[p.name]['points'] += total_p
-                player_stats[p.name]['games'] += 1
+        for name, points, round_num in results:
+            if name not in player_stats:
+                player_stats[name] = {'points': 0, 'wins': 0, 'rounds': 0}
             
-            if game_scores:
-                # Determine winner of this game
-                winner_id = max(game_scores, key=game_scores.get)
-                winner = Player.query.get(winner_id)
-                if winner:
-                   player_stats[winner.name]['wins'] += 1
+            player_stats[name]['points'] += points
+            player_stats[name]['rounds'] += 1
+            if points > 0:
+                player_stats[name]['wins'] += 1
                         
         # Sort players by wins, then points
         sorted_players = []
@@ -67,15 +65,15 @@ class GameEngine:
                 'name': name,
                 'wins': stats['wins'],
                 'points': stats['points'],
-                'avg_points': round(stats['points'] / stats['games'], 1) if stats['games'] > 0 else 0,
-                'games': stats['games']
+                'avg_points': round(stats['points'] / stats['rounds'], 1) if stats['rounds'] > 0 else 0,
+                'games': stats['rounds'] # UI says "Games", but implies Rounds
             })
         
         sorted_players.sort(key=lambda x: (x['wins'], x['points']), reverse=True)
         
         return {
-            'total_games': total_games,
-            'completed_games': completed_games_count,
+            'total_games': len(games) if 'games' in locals() else Game.query.count(), # Legacy metric
+            'completed_games': completed_rounds_count, # Valid Rounds
             'contracts': contract_stats,
             'players': sorted_players
         }
@@ -736,9 +734,14 @@ class GameEngine:
         # Check if trick is complete
         if len(cards_played) == 4:
             # Determine winner
+            # For Miserie, there is NO trump
+            effective_trump_suit = current_round.trump_suit
+            if current_round.winning_bid in ['Miserie', 'Open Miserie']:
+                effective_trump_suit = None
+
             winner_id = self._determine_trick_winner(
                 cards_played,
-                current_round.trump_suit
+                effective_trump_suit
             )
             trick.winner_id = winner_id
             
@@ -921,7 +924,7 @@ class GameEngine:
                     if not card_obj:
                         continue
                         
-                    played_cards.append(card_obj)
+                    played_cards.append({'player_id': p_id, 'card': card_obj})
                     
                     if i == 0:
                         trick_led_suit = card_obj.suit
@@ -933,12 +936,17 @@ class GameEngine:
                             player_voids[p_id].append(trick_led_suit)
 
             ai = AIPlayer(difficulty=player.ai_difficulty)
+            # For Miserie, use None as trump suit
+            effective_trump_suit = trump_suit
+            if is_miserie:
+                effective_trump_suit = None
+
             card = ai.select_card(
                 player_id,
                 current_round.bidder_id,
                 hand, 
                 current_trick, 
-                trump_suit, 
+                effective_trump_suit, 
                 led_suit, 
                 is_partner_winning=is_partner_winning, 
                 is_miserie=is_miserie,
@@ -949,12 +957,17 @@ class GameEngine:
         except Exception as e:
             # Fallback to basic AI selection to prevent game freeze
             ai = AIPlayer(difficulty=player.ai_difficulty)
+            # For Miserie, use None as trump suit
+            effective_trump_suit = trump_suit
+            if is_miserie:
+                effective_trump_suit = None
+
             card = ai.select_card(
                 player_id,
                 current_round.bidder_id,
                 hand, 
                 current_trick, 
-                trump_suit, 
+                effective_trump_suit, 
                 led_suit, 
                 is_partner_winning=is_partner_winning,
                 is_miserie=is_miserie
@@ -983,6 +996,9 @@ class GameEngine:
             'Ruiten': Suit.Diamond, 'Diamond': Suit.Diamond, 'Diamonds': Suit.Diamond,
             'Schuppen': Suit.Spade, 'Spade': Suit.Spade, 'Spades': Suit.Spade, 'Schoppen': Suit.Spade
         }
+        
+        if not suit_name:
+             return Suit.Unknown
         
         # Direct map check (case insensitive)
         for key, val in suit_map.items():
@@ -1024,7 +1040,7 @@ class GameEngine:
     
     def _determine_trick_winner(self, cards_played, trump_suit_name):
         """Determine winner of a trick"""
-        trump_suit = self._parse_suit(trump_suit_name)
+        trump_suit = self._parse_suit(trump_suit_name) if trump_suit_name else Suit.Unknown
         
         led_card = self._parse_card(cards_played[0]['card_name'])
         led_suit = led_card.suit

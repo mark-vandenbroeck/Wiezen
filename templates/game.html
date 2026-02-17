@@ -70,6 +70,8 @@
                 <span>Slag: <span id="trick-number">0</span></span>
             </div>
             <div class="game-actions">
+                <a href="/" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Home</a>
+                <button id="stats-btn" class="btn btn-secondary">Statistieken</button>
                 <button id="history-btn" class="btn btn-secondary">Historiek</button>
                 <button id="toggle-debug-btn" class="btn btn-debug">{{ 'Debug Aan' if not game.debug_mode else 'Debug
                     Uit' }}</button>
@@ -183,12 +185,43 @@
         </div>
     </div>
 </div>
+</div>
+
+<!-- Stats Modal -->
+<div id="stats-modal" class="modal">
+    <div class="modal-content stats-modal-content" style="max-width: 800px; width: 90%;">
+        <div class="modal-header">
+            <h2>Spelstatistieken</h2>
+            <button id="close-stats-btn" class="btn-close">&times;</button>
+        </div>
+        <div class="stats-summary"
+            style="display: flex; justify-content: space-around; margin-bottom: 20px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+            <div class="stat-item text-center">
+                <div style="font-size: 0.9em; color: #aaa;">Totaal Spellen</div>
+                <div id="ingame-total-games" style="font-size: 1.5em; font-weight: bold;">-</div>
+            </div>
+            <div class="stat-item text-center">
+                <div style="font-size: 0.9em; color: #aaa;">Jouw Wins</div>
+                <div id="ingame-user-wins" style="font-size: 1.5em; font-weight: bold; color: var(--accent-color);">-
+                </div>
+            </div>
+            <div class="stat-item text-center">
+                <div style="font-size: 0.9em; color: #aaa;">Win %</div>
+                <div id="ingame-win-rate" style="font-size: 1.5em; font-weight: bold;">-</div>
+            </div>
+        </div>
+        <div class="chart-container" style="position: relative; height: 300px; width: 100%;">
+            <canvas id="ingamePlayerChart"></canvas>
+        </div>
+    </div>
+</div>
 
 <script>
     const GAME_ID = {{ game.id }};
     const PLAYERS = {{ players_json | tojson }};
     const DEBUG_MODE = {{ 'true' if game.debug_mode else 'false' }};
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/SoundManager.js') }}"></script>
-<script src="{{ url_for('static', filename='js/game.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/game.js') }}?v=6"></script>
 {% endblock %}

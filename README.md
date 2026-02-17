@@ -14,6 +14,7 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
 - **Slimme Sortering**: Kaarten in de hand worden nu gesorteerd met interleaved kleuren (Rood-Zwart-Rood-Zwart) voor betere leesbaarheid.
 - **Verbindingsindicator**: Visuele feedback via een status indicator als de server onbereikbaar is.
 - **Statistieken Dashboard**: Uitgebreid overzicht van gewonnen spellen, contract frequenties en speler ranglijsten.
+- **In-Game Statistieken**: Bekijk tijdens het spel direct je voortgang, winstpercentage en grafieken via een popup, zonder het spel te verlaten.
 - **Geluidseffecten**: Subtiele geluiden voor delen, kaarten spelen en slagen winnen (gegenereerd via Web Audio API, geen externe bestanden nodig).
 
 ## Technologie Stack
@@ -139,6 +140,12 @@ De AI past zijn speelstijl aan op basis van zijn rol (Aanvaller vs. Verdediger) 
 De Hard AI probeert informatie door te geven aan zijn partner:
 -   **Seinen (Zenden)**: Als de AI moet afgooien (niet kan volgen), zal hij proberen een **hoge kaart** (7, 8, 9, 10) van een sterke kleur af te gooien. Dit is een signaal ("High Call") dat hij die kleur graag gespeeld wil hebben.
 -   **Lezen & Samenwerken**: De AI analyseert de afgooi van zijn partner. Als hij een signaal detecteert, zal hij (als hij aan de beurt is) bij voorkeur **die kleur uitkomen** om zijn partner in de hand te spelen.
+
+### 6. Miserie & No-Trump
+-   **Miserie (Open)**: Dit contract wordt gespeeld als een **No-Trump** spel.
+    -   Er is **geen troefkleur**.
+    -   De **vlag** (kaart die de troefkleur bepaalde) heeft geen enkele extra waarde meer.
+    -   De slag wordt enkel gewonnen door de hoogste kaart van de *gevraagde* kleur.
 
 ## Ontwikkeling
 

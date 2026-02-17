@@ -112,6 +112,29 @@ function setupEventListeners() {
     if (closeHistoryBtn) {
         closeHistoryBtn.addEventListener('click', hideHistoryModal);
     }
+
+    // Stats button
+    const statsBtn = document.getElementById('stats-btn');
+    if (statsBtn) {
+        statsBtn.addEventListener('click', showStatsModal);
+    }
+
+    const closeStatsBtn = document.getElementById('close-stats-btn');
+    if (closeStatsBtn) {
+        closeStatsBtn.addEventListener('click', hideStatsModal);
+    }
+
+    // Close modals on outside click
+    window.addEventListener('click', (event) => {
+        const historyModal = document.getElementById('history-modal');
+        const statsModal = document.getElementById('stats-modal');
+        if (event.target === historyModal) {
+            hideHistoryModal();
+        }
+        if (event.target === statsModal) {
+            hideStatsModal();
+        }
+    });
 }
 
 /**
@@ -1033,3 +1056,80 @@ async function fetchAndPopulateHistory() {
 
 // Start game when page loads
 document.addEventListener('DOMContentLoaded', initGame);
+
+// --- Stats Modal Logic ---
+
+async function showStatsModal() {
+    const modal = document.getElementById('stats-modal');
+    modal.style.display = 'block';
+
+    try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+        renderInGameStats(stats);
+    } catch (e) {
+        console.error('Error loading in-game stats:', e);
+    }
+}
+
+function hideStatsModal() {
+    const modal = document.getElementById('stats-modal');
+    modal.style.display = 'none';
+}
+
+let ingameChart = null;
+
+function renderInGameStats(stats) {
+    // Summary
+    document.getElementById('ingame-total-games').textContent = stats.completed_games;
+    const human = stats.players.find(p => p.name === 'Jij') || { wins: 0 };
+    document.getElementById('ingame-user-wins').textContent = human.wins;
+    const winRate = stats.completed_games > 0 ? (human.wins / stats.completed_games * 100).toFixed(0) : 0;
+    document.getElementById('ingame-win-rate').textContent = `${winRate}%`;
+
+    // Chart
+    const ctx = document.getElementById('ingamePlayerChart').getContext('2d');
+
+    if (ingameChart) {
+        ingameChart.destroy();
+    }
+
+    const topPlayers = stats.players.slice(0, 5);
+
+    ingameChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: topPlayers.map(p => p.name),
+            datasets: [{
+                label: 'Gewonnen Spellen',
+                data: topPlayers.map(p => p.wins),
+                backgroundColor: [
+                    'rgba(59, 130, 246, 0.8)',
+                    'rgba(16, 185, 129, 0.8)',
+                    'rgba(245, 158, 11, 0.8)',
+                    'rgba(239, 68, 68, 0.8)'
+                ],
+                borderRadius: 4,
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: '#ccc', stepSize: 1 },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                },
+                x: {
+                    ticks: { color: '#ccc' },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
