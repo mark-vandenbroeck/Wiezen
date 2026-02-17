@@ -577,6 +577,8 @@ body {
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
     border-radius: var(--radius-md);
     overflow: hidden;
+    background-color: white;
+    /* Ensure cards stay white even when semi-transparent */
 }
 
 .card:hover {
