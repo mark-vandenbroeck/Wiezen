@@ -10,7 +10,9 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
 - **Debug modus**: Toon alle kaarten van tegenstanders voor debugging doeleinden
 - **Volledige spelregels**: Bieden (Vraag, Mee, Solo Slim, Miserie, etc.), slagen spelen, en score bijhouden
 - **Partnerschap Badges**: Duidelijke visualisatie van wie met wie speelt tijdens een ronde
-- **Database persistentie**: Spellen worden opgeslagen in SQLite
+- **Resilient Game Loop**: Automatisch herstel bij verbindingsproblemen of verbreken van de verbinding (bijv. na sleep mode).
+- **Slimme Sortering**: Kaarten in de hand worden nu gesorteerd met interleaved kleuren (Rood-Zwart-Rood-Zwart) voor betere leesbaarheid.
+- **Verbindingsindicator**: Visuele feedback via een status indicator als de server onbereikbaar is.
 
 ## Technologie Stack
 
@@ -56,11 +58,12 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
 
 ### Spelen
 
-1. **Bieden**: Klik op je gewenste bod in de overzichtelijke 2-rijen layout.
+1. **Bieden**: Klik op je gewenste bod in de overzichtelijke 2-rijen layout. De interface blokkeert automatisch biedingen die lager zijn dan het huidige maximum.
 2. **Kaarten spelen**: Klik op een kaart in je hand om te spelen met vloeiende animaties.
 3. **Slagen**: Na 4 kaarten wordt de slag automatisch bepaald.
 4. **Score**: Scores worden bijgehouden en getoond bij elke speler.
 5. **Miserie**: Bij een Miserie bod stopt het spel onmiddellijk zodra de bieder een slag haalt.
+6. **Herstel**: Als het spel vastloopt (bijv. AI zet niet door), herstelt de loop zich automatisch na een korte timeout.
 
 ### Debug Modus
 
@@ -72,16 +75,20 @@ Klik op de "Debug Aan/Uit" knop tijdens het spel om de kaarten van tegenstanders
 - 52 kaarten worden gedeeld (13 per speler).
 - De troefkaart blijft het hele spel zichtbaar.
 - Bij **Abondance** mag de bieder de troefkleur kiezen, waarna de zichtbare troefkaart wordt aangepast.
+- **Troel**: Als een speler 3 Azen heeft, wordt dit automatisch herkend. De speler met de 4e Aas wordt de partner en MOET de eerste slag leiden met die Aas.
 
-### Bieden
-- **Vraag**: Zoek een partner om samen 8+ slagen te winnen.
-- **Mee**: Accepteer een Vraag bod.
-- **Solo**: Alleen 5+ slagen winnen.
-- **Abondance**: Alleen 9+ slagen winnen. De bieder kiest de troef.
-- **Solo Slim**: Alle 13 slagen winnen.
-- **Miserie**: Geen enkele slag halen. Het spel stopt zodra de bieder een slag haalt.
-- **Open Miserie**: Geen enkele slag halen met open kaarten (16 punten).
-- **Pas**: Niet bieden.
+### Bieden (Hiërarchie)
+De biedingen volgen een strikte rangorde:
+1. **Vraag / Mee / Alleen** (Niveau 1)
+2. **Abondance** (Niveau 2)
+3. **Miserie** (Niveau 3)
+4. **Open Miserie** (Niveau 4)
+5. **Solo Slim** (Niveau 5)
+
+**Regels**:
+- Je mag nooit lager bieden dan het huidige maximum.
+- Bij biedingen van hetzelfde niveau (Niveau 2-5) behoudt de eerste bieder het contract; je moet strikt hoger bieden om het over te nemen.
+- **Alleen** kan een lone **Vraag** overnemen op Niveau 1.
 
 ### Spelen
 - Volg kleur als je kan.
@@ -94,50 +101,15 @@ De AI op het "Moeilijk" niveau gebruikt de volgende technieken:
 - **Kaarten Tellen**: De AI onthoudt welke Azen en Heren zijn gespeeld om te weten of hun eigen kaarten nu "meesters" zijn.
 - **Void Tracking**: Identificeert welke suits tegenstanders niet meer hebben. De AI kan deze kleuren trekken om tegenstanders te dwingen hun troeven te gebruiken.
 - **Partnerschap Logica**: De AI herkent teamgenoten en speelt defensief/ondersteunend (bijv. laag spelen als de partner de slag al wint).
-
-## Project Structuur
-
-```
-Wiezen/
-├── app.py                 # Hoofdapplicatie met routes
-├── models.py              # Database modellen
-├── game_engine.py         # Spel logica orchestratie
-├── ai_player.py           # AI speler strategieën
-├── card_svg.py            # SVG kaart generatie
-├── config.py              # Configuratie
-├── requirements.txt       # Python dependencies
-├── wiezen.db             # SQLite database (wordt aangemaakt)
-├── templates/
-│   ├── base.html         # Basis template
-│   ├── index.html        # Home pagina
-│   └── game.html         # Spel interface
-├── static/
-│   ├── css/
-│   │   └── style.css     # Styling
-│   └── js/
-│       ├── cards.js      # Kaart rendering
-│       └── game.js       # Spel logica
-└── arch/                 # Bestaande game logica
-    ├── cards/
-    ├── game/
-    └── users/
-```
+- **Biedingsbewustzijn**: De AI volgt de strikte hiërarchie en zal niet proberen ongeldige biedingen te doen.
 
 ## Ontwikkeling
 
-### Database Reset
-
-Om de database te resetten:
+### Testen
+Er zijn unit tests beschikbaar voor de kernfunctionaliteiten:
 ```bash
-rm wiezen.db
-python app.py  # Database wordt opnieuw aangemaakt
-```
-
-### Debug Modus Activeren via Environment
-
-```bash
-export DEBUG_MODE=true
-python app.py
+pytest tests/test_troel.py
+pytest tests/test_bidding_hierarchy.py
 ```
 
 ## Toekomstige Uitbreidingen
@@ -145,7 +117,6 @@ python app.py
 - Spel geschiedenis en statistieken
 - Multiplayer ondersteuning
 - Geluid effecten
-- Meer interactieve handleiding
 
 ## Licentie
 

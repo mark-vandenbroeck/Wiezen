@@ -331,6 +331,7 @@ class GameEngine:
         if bid == 'Pas': return 0
         if bid == 'Vraag': return 1
         if bid == 'Mee': return 1
+        if bid == 'Alleen': return 1
         if bid == 'Abondance': return 2
         if bid == 'Miserie': return 3
         if bid == 'Open Miserie': return 4
@@ -416,15 +417,18 @@ class GameEngine:
             
             curr_val = self._get_bid_value(bid)
             
+            if curr_val < max_val:
+                return {'error': f'Cannot bid {bid} (value {curr_val}) after higher bid (value {max_val})'}
+            
             if bid == 'Mee':
                 if not has_vraag:
                     return {'error': 'Cannot bid Mee without Vraag'}
                 if max_val > 1:
-                     return {'error': 'Cannot bid Mee after higher bid'}
+                     return {'error': 'Cannot bid Mee after high contract (Abondance, Miserie, etc.)'}
             elif bid == 'Vraag' and has_vraag:
                  return {'error': 'Vraag already bid'}
-            elif curr_val < max_val:
-                return {'error': f'Cannot bid {bid} after higher bid'}
+            elif bid == 'Alleen' and any(b['bid'] == 'Alleen' for b in bids):
+                 return {'error': 'Alleen already bid'}
 
         # Store bid
         bids = list(current_round.bids) if current_round.bids else []
@@ -445,34 +449,47 @@ class GameEngine:
                 db.session.commit()
                 return {'status': 'all_passed'}
             
-            # Find the highest bid
-            max_bid_info = real_bids[0]
-            max_val = self._get_bid_value(max_bid_info['bid'])
+            # Find the highest bid level
+            max_val = 0
             for b in real_bids:
-                if self._get_bid_value(b['bid']) > max_val:
-                    max_bid_info = b
-                    max_val = self._get_bid_value(b['bid'])
-
-            # Case: Vraag was highest but not joined
-            if max_bid_info['bid'] == 'Vraag' and not any(b['bid'] == 'Mee' for b in bids):
-                current_round.phase = 'choosing_alleen'
-                current_round.bidder_id = max_bid_info['player_id']
-                db.session.commit()
-                return {'status': 'waiting_for_alleen', 'bidder_id': current_round.bidder_id}
-
-            # Case: Vraag joined by Mee
-            if any(b['bid'] == 'Mee' for b in bids):
-                vraag_info = next(b for b in bids if b['bid'] == 'Vraag')
-                mee_info = next(b for b in bids if b['bid'] == 'Mee')
-                current_round.winning_bid = 'Vraag'
-                current_round.bidder_id = vraag_info['player_id']
-                current_round.partner_id = mee_info['player_id']
-                current_round.phase = 'playing'
-            else:
-                # Any other high bid (Miserie or Solo Slim handled above but safely fallback)
+                val = self._get_bid_value(b['bid'])
+                if val > max_val:
+                    max_val = val
+            
+            if max_val >= 2:
+                # High contract (Abondance, Miserie, etc.)
+                # Winner is the FIRST player who bid at the highest level
+                max_bid_info = next(b for b in real_bids if self._get_bid_value(b['bid']) == max_val)
                 current_round.winning_bid = max_bid_info['bid']
                 current_round.bidder_id = max_bid_info['player_id']
                 current_round.phase = 'playing'
+            else:
+                # Level 1 (Vraag/Mee/Alleen)
+                if any(b['bid'] == 'Mee' for b in real_bids):
+                    # Vraag + Mee partnership wins
+                    vraag_info = next(b for b in real_bids if b['bid'] == 'Vraag')
+                    mee_info = next(b for b in real_bids if b['bid'] == 'Mee')
+                    current_round.winning_bid = 'Vraag'
+                    current_round.bidder_id = vraag_info['player_id']
+                    current_round.partner_id = mee_info['player_id']
+                    current_round.phase = 'playing'
+                elif any(b['bid'] == 'Alleen' for b in real_bids):
+                    # Lone Alleen wins
+                    alleen_info = next(b for b in real_bids if b['bid'] == 'Alleen')
+                    current_round.winning_bid = 'Alleen'
+                    current_round.bidder_id = alleen_info['player_id']
+                    current_round.phase = 'playing'
+                elif any(b['bid'] == 'Vraag' for b in real_bids):
+                    # Lone Vraag: wait for Alleen decision
+                    vraag_info = next(b for b in real_bids if b['bid'] == 'Vraag')
+                    current_round.phase = 'choosing_alleen'
+                    current_round.bidder_id = vraag_info['player_id']
+                    db.session.commit()
+                    return {'status': 'waiting_for_alleen', 'bidder_id': current_round.bidder_id}
+                else:
+                    # Fallback
+                    current_round.phase = 'completed'
+                    current_round.winning_bid = 'Pas'
             
             current_round.current_trick = 0
             first_trick = Trick(
@@ -569,8 +586,12 @@ class GameEngine:
             trick_number=current_trick_num
         ).first()
         
-        # If no trick exists yet, we assume leading
         if not trick or not trick.cards_played:
+            # Special case: Troel first trick lead must be the partner card
+            if current_round.winning_bid == 'Troel' and current_trick_num == 0:
+                if current_round.trump_card in hand_names:
+                    return [current_round.trump_card]
+            
             # Leading, all cards valid
             return hand_names
         
@@ -747,6 +768,21 @@ class GameEngine:
             return None
         
         current_round = self.get_current_round()
+        
+        # Special case: Troel first trick lead must be the partner card
+        if current_round.winning_bid == 'Troel' and current_round.current_trick == 0:
+            # Check if this AI player is the leader and hasn't played yet
+            trick = Trick.query.filter_by(
+                round_id=current_round.id,
+                trick_number=0
+            ).first()
+            if not trick or not trick.cards_played:
+                if player_id == current_round.partner_id:
+                    # AI is the Troel partner and must lead
+                    hand_names = current_round.hands.get(str(player_id), [])
+                    if current_round.trump_card in hand_names:
+                        return current_round.trump_card
+
         hand_names = current_round.hands.get(str(player_id), [])
         hand = [self._parse_card(name) for name in hand_names]
         

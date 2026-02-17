@@ -9,6 +9,10 @@ let validCards = [];
 let isProcessingAI = false;
 let isTrickClearing = false;
 let lastTrickNum = -1;
+let consecutiveErrors = 0;
+let lastInteractionTime = Date.now();
+let aiProcessingStartTime = 0;
+let trickClearingStartTime = 0;
 
 // Initialize game
 async function initGame() {
@@ -26,6 +30,33 @@ async function initGame() {
 
     // Start game loop
     gameLoop();
+
+    // Visibility change listener to recover from sleep/background
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log('Tab visible again, refreshing state...');
+            updateGameState();
+        }
+    });
+
+    // Update interaction time
+    document.addEventListener('mousedown', () => lastInteractionTime = Date.now());
+    document.addEventListener('keydown', () => lastInteractionTime = Date.now());
+}
+
+function updateConnectionStatus(errorCount) {
+    const statusEl = document.getElementById('connection-status');
+    if (!statusEl) return;
+
+    if (errorCount > 0) {
+        statusEl.style.display = 'flex';
+        const statusText = statusEl.querySelector('.status-text');
+        if (statusText) {
+            statusText.textContent = errorCount > 3 ? 'Verbinding verbroken - Opnieuw proberen...' : 'Verbinding herstellen...';
+        }
+    } else {
+        statusEl.style.display = 'none';
+    }
 }
 
 function setupEventListeners() {
@@ -103,8 +134,12 @@ async function selectTrump(suit) {
             document.getElementById('trump-modal').classList.remove('active');
             await updateGameState();
         }
+        consecutiveErrors = 0;
+        updateConnectionStatus(0);
     } catch (e) {
         console.error('Error selecting trump:', e);
+        consecutiveErrors++;
+        updateConnectionStatus(consecutiveErrors);
     }
 }
 
@@ -142,52 +177,63 @@ async function submitBid(bid) {
                 checkTurnAndAct();
             }
         }
+        consecutiveErrors = 0;
+        updateConnectionStatus(0);
     } catch (e) {
         console.error('Error submitting bid:', e);
+        consecutiveErrors++;
+        updateConnectionStatus(consecutiveErrors);
     }
 }
 
 let lastGameStateJson = null;
 
 async function updateGameState() {
-    const response = await fetch(`/api/game/${GAME_ID}/state`);
-    const newState = await response.json();
+    try {
+        const response = await fetch(`/api/game/${GAME_ID}/state`);
+        const newState = await response.json();
 
-    if (newState.error) {
-        console.error('Error loading game state:', newState.error);
-        return;
-    }
-
-    // Determine if anything meaningful changed to avoid flickering
-    const newStateJson = JSON.stringify(newState);
-    const stateChanged = newStateJson !== lastGameStateJson;
-
-    // Check if trick completed (trick number increased)
-    if (lastTrickNum !== -1 && newState.round && newState.round.current_trick > lastTrickNum) {
-        console.log('Trick completed! Delaying clear...');
-        isTrickClearing = true;
-        gameState = newState;
-        lastGameStateJson = newStateJson;
-        lastTrickNum = gameState.round.current_trick;
-        renderGameState();
-
-        // Clear after delay and allow next turn
-        setTimeout(() => {
-            console.log('Clearing trick area.');
-            isTrickClearing = false;
-            renderTrick();
-            checkTurnAndAct();
-        }, 3000);
-    } else if (stateChanged || isTrickClearing) {
-        gameState = newState;
-        lastGameStateJson = newStateJson;
-        if (gameState.round) {
-            lastTrickNum = gameState.round.current_trick;
+        if (newState.error) {
+            console.error('Error loading game state:', newState.error);
+            return;
         }
-        renderGameState();
-    } else {
-        // No change, skip render to avoid flickering
-        // console.log('State unchanged, skipping render.');
+
+        consecutiveErrors = 0;
+        updateConnectionStatus(0);
+
+        // Determine if anything meaningful changed to avoid flickering
+        const newStateJson = JSON.stringify(newState);
+        const stateChanged = newStateJson !== lastGameStateJson;
+
+        // Check if trick completed (trick number increased)
+        if (lastTrickNum !== -1 && newState.round && newState.round.current_trick > lastTrickNum) {
+            console.log('Trick completed! Delaying clear...');
+            isTrickClearing = true;
+            trickClearingStartTime = Date.now();
+            gameState = newState;
+            lastGameStateJson = newStateJson;
+            lastTrickNum = gameState.round.current_trick;
+            renderGameState();
+
+            // Clear after delay and allow next turn
+            setTimeout(() => {
+                console.log('Clearing trick area.');
+                isTrickClearing = false;
+                renderTrick();
+                checkTurnAndAct();
+            }, 3000);
+        } else if (stateChanged || isTrickClearing) {
+            gameState = newState;
+            lastGameStateJson = newStateJson;
+            if (gameState.round) {
+                lastTrickNum = gameState.round.current_trick;
+            }
+            renderGameState();
+        }
+    } catch (e) {
+        console.error('Error updating game state:', e);
+        consecutiveErrors++;
+        updateConnectionStatus(consecutiveErrors);
     }
 }
 
@@ -699,9 +745,13 @@ async function playCard(cardName) {
         }
 
         console.log('Card played successfully');
+        consecutiveErrors = 0;
+        updateConnectionStatus(0);
         await updateGameState();
     } catch (e) {
         console.error('Error playing card:', e);
+        consecutiveErrors++;
+        updateConnectionStatus(consecutiveErrors);
     }
 }
 // AI Turn Management
@@ -719,11 +769,16 @@ async function checkTurnAndAct() {
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             try {
+                aiProcessingStartTime = Date.now();
                 const response = await fetch(`/api/game/${GAME_ID}/ai/bid/${currentBidderId}`);
                 await response.json();
+                consecutiveErrors = 0;
+                updateConnectionStatus(0);
                 await updateGameState();
             } catch (e) {
                 console.error('AI Processing Error:', e);
+                consecutiveErrors++;
+                updateConnectionStatus(consecutiveErrors);
             } finally {
                 isProcessingAI = false;
                 // Trigger check for next player safely
@@ -759,11 +814,16 @@ async function checkTurnAndAct() {
 
             if (nextPlayer && !nextPlayer.is_human) {
                 isProcessingAI = true;
+                aiProcessingStartTime = Date.now();
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
                 try {
                     const response = await fetch(`/api/game/${GAME_ID}/ai/play/${nextPlayer.id}`);
                     const result = await response.json();
+
+                    consecutiveErrors = 0;
+                    updateConnectionStatus(0);
+
                     if (result.result && result.result.trick_complete) {
                         await updateGameState();
                         setTimeout(async () => {
@@ -772,6 +832,10 @@ async function checkTurnAndAct() {
                     } else {
                         await updateGameState();
                     }
+                } catch (e) {
+                    console.error('AI Play Error:', e);
+                    consecutiveErrors++;
+                    updateConnectionStatus(consecutiveErrors);
                 } finally {
                     isProcessingAI = false;
                     // Trigger check for next player safely
@@ -790,6 +854,23 @@ async function checkTurnAndAct() {
 function gameLoop() {
     // Poll for game state updates every 2 seconds
     setInterval(async () => {
+        const now = Date.now();
+
+        // Safety resets for stuck states
+        if (isProcessingAI && now - aiProcessingStartTime > 15000) {
+            console.warn('AI processing stuck for >15s, resetting...');
+            isProcessingAI = false;
+        }
+        if (isTrickClearing && now - trickClearingStartTime > 10000) {
+            console.warn('Trick clearing stuck for >10s, resetting...');
+            isTrickClearing = false;
+        }
+
+        // Recovery if stagnant (e.g. after wake from sleep)
+        if (now - lastInteractionTime > 300000) { // 5 minutes idle
+            // Still poll, but maybe less frequently or just ensure we don't break
+        }
+
         if (!isProcessingAI && !isTrickClearing) {
             await updateGameState();
         }

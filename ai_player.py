@@ -46,6 +46,14 @@ class AIPlayer:
             suit_counts[suit] = sum(1 for card in hand if card.suit == suit)
         max_suit_len = max(suit_counts.values())
         
+        # Check max bid level from previous bids
+        max_bid_val = 0
+        for bid in previous_bids:
+            # We need a way to map bid names to values here too, or just use rank
+            val = self._get_bid_value_for_ai(bid)
+            if val > max_bid_val:
+                max_bid_val = val
+
         # Check for Open Miserie (very weak hand)
         low_cards = sum(1 for card in hand if card.rank in [Rank.Two, Rank.Three, Rank.Four, Rank.Five])
         is_open_miserie_candidate = (num_high_cards == 0 and num_trumps <= 1 and low_cards >= 9)
@@ -54,20 +62,44 @@ class AIPlayer:
         vraag_bid = any(bid == 'Vraag' for bid in previous_bids)
         
         # Difficulty-based decision making
+        bid = 'Pas'
         if self.difficulty == 'easy':
-            if is_open_miserie_candidate and random.random() < 0.05: return 'Open Miserie'
-            if max_suit_len >= 8: return 'Abondance'
-            return self._easy_bid(num_trumps, num_aces, num_high_cards, vraag_bid)
+            if is_open_miserie_candidate and random.random() < 0.05: bid = 'Open Miserie'
+            elif max_suit_len >= 8: bid = 'Abondance'
+            else: bid = self._easy_bid(num_trumps, num_aces, num_high_cards, vraag_bid)
         elif self.difficulty == 'hard':
-            if is_open_miserie_candidate and random.random() < 0.2: return 'Open Miserie'
-            best_suit = max(suit_counts, key=suit_counts.get)
-            suit_highs = sum(1 for c in hand if c.suit == best_suit and c.rank in [Rank.Ace, Rank.King])
-            if max_suit_len >= 7 and suit_highs >= 1: return 'Abondance'
-            return self._hard_bid(hand, trump_suit, num_trumps, num_aces, num_high_cards, vraag_bid)
+            if is_open_miserie_candidate and random.random() < 0.2: bid = 'Open Miserie'
+            else:
+                best_suit = max(suit_counts, key=suit_counts.get)
+                suit_highs = sum(1 for c in hand if c.suit == best_suit and c.rank in [Rank.Ace, Rank.King])
+                if max_suit_len >= 7 and suit_highs >= 1: bid = 'Abondance'
+                else: bid = self._hard_bid(hand, trump_suit, num_trumps, num_aces, num_high_cards, vraag_bid)
         else:  # medium
-            if is_open_miserie_candidate and random.random() < 0.1: return 'Open Miserie'
-            if max_suit_len >= 8: return 'Abondance'
-            return self._medium_bid(num_trumps, num_aces, num_high_cards, vraag_bid)
+            if is_open_miserie_candidate and random.random() < 0.1: bid = 'Open Miserie'
+            elif max_suit_len >= 8: bid = 'Abondance'
+            else: bid = self._medium_bid(num_trumps, num_aces, num_high_cards, vraag_bid)
+
+        # Enforce hierarchy: if chosen bid is lower than max, or same but already bid (for level >= 2), return Pas
+        if bid != 'Pas':
+            bid_val = self._get_bid_value_for_ai(bid)
+            if bid_val < max_bid_val:
+                return 'Pas'
+            if bid_val == max_bid_val and bid_val >= 2:
+                # Can't overbid same level
+                return 'Pas'
+            # Level 1 joins are allowed (Mee after Vraag)
+            if bid == 'Vraag' and vraag_bid:
+                return 'Pas' # Already bid
+            
+        return bid
+
+    def _get_bid_value_for_ai(self, bid):
+        """Internal helper for AI to know bid strengths"""
+        values = {
+            'Pas': 0, 'Vraag': 1, 'Mee': 1, 'Alleen': 1,
+            'Abondance': 2, 'Miserie': 3, 'Open Miserie': 4, 'Solo Slim': 5
+        }
+        return values.get(bid, 0)
 
     def choose_alleen_or_pas(self, hand, trump_card):
         """Decide whether to go Alleen if Vraag wasn't joined"""
