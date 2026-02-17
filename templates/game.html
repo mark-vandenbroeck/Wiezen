@@ -53,9 +53,11 @@
     <div class="center-area">
         <div class="game-info">
             <div class="trump-info" id="trump-info">
-                <span id="trump-suit-label">Troef:</span>
-                <span id="trump-suit"></span>
-                <span id="trump-card"></span>
+                <div class="trump-badge" id="trump-badge">
+                    <span class="trump-suit-icon" id="trump-suit-icon"></span>
+                    <span class="trump-suit-text" id="trump-suit-text"></span>
+                </div>
+                <div id="trump-card-container"></div>
             </div>
             <div class="round-info">
                 <span>Ronde: <span id="round-number">{{ game.current_round }}</span></span>

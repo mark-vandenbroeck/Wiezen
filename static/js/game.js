@@ -189,13 +189,33 @@ function renderGameState() {
 
     // Update trump info
     const trumpSuit = gameState.round.trump_suit;
-    document.getElementById('trump-suit').textContent = getSuitSymbol(trumpSuit);
-    document.getElementById('trump-suit').style.color = getSuitColor(trumpSuit);
+    const suitIcon = document.getElementById('trump-suit-icon');
+    const suitText = document.getElementById('trump-suit-text');
+    const cardContainer = document.getElementById('trump-card-container');
 
-    const { suit, rank } = parseCardName(gameState.round.trump_card);
-    document.getElementById('trump-card').innerHTML = `
-        <img src="/api/card/${suit}/${rank}" width="60" height="84" alt="Trump card">
-    `;
+    if (suitIcon && suitText && cardContainer) {
+        const symbol = getSuitSymbol(trumpSuit);
+        const color = getSuitColor(trumpSuit);
+
+        // Dutch suit names
+        const dutchSuits = {
+            'Heart': 'Harten', 'Harten': 'Harten',
+            'Diamond': 'Ruiten', 'Ruiten': 'Ruiten',
+            'Club': 'Klaveren', 'Klaveren': 'Klaveren',
+            'Spade': 'Schuppen', 'Schuppen': 'Schuppen'
+        };
+        const suitName = dutchSuits[trumpSuit] || trumpSuit;
+
+        suitIcon.textContent = symbol;
+        suitIcon.style.color = color;
+        suitText.textContent = suitName;
+        suitText.style.color = color;
+
+        const { suit, rank } = parseCardName(gameState.round.trump_card);
+        cardContainer.innerHTML = `
+            <img src="/api/card/${suit}/${rank}" alt="Trump card">
+        `;
+    }
 
     // Update scores
     for (const player of PLAYERS) {

@@ -453,23 +453,35 @@ body {
     gap: var(--spacing-md);
 }
 
-.trump-info span,
-.round-info span {
-    font-weight: 600;
-    font-size: 0.95rem;
-    color: var(--text-primary);
+.trump-badge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background-color: var(--bg-card);
+    padding: 6px 16px;
+    border-radius: 30px;
+    border: 2px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-normal);
 }
 
-#trump-suit {
-    font-size: 1.5rem;
-    color: var(--accent-primary);
+.trump-suit-icon {
+    font-size: 2rem;
     line-height: 1;
 }
 
-#trump-card img {
-    width: 30px;
-    height: 42px;
-    border-radius: 2px;
+.trump-suit-text {
+    font-size: 1rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#trump-card-container img {
+    width: 35px;
+    height: 49px;
+    border-radius: 4px;
+    box-shadow: var(--shadow-sm);
     vertical-align: middle;
 }
 
