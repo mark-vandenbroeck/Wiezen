@@ -288,13 +288,14 @@ body {
 }
 
 .player-area {
-    background-color: var(--bg-secondary);
-    border: 2px solid var(--border-color);
+    background-color: rgba(0, 0, 0, 0.1);
+    /* Very subtle dark tint on green */
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
     padding: var(--spacing-sm);
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-md);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
     position: relative;
 }
 
@@ -436,8 +437,8 @@ body {
 }
 
 .game-info {
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-md);
     padding: var(--spacing-sm) var(--spacing-md);
     display: flex;
@@ -490,15 +491,15 @@ body {
 
 .trick-area {
     flex: 1;
-    background-color: var(--bg-secondary);
-    border: 2px solid var(--border-color);
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
     padding: var(--spacing-md);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--spacing-lg);
-    box-shadow: var(--shadow-md);
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.1);
     min-height: 150px;
     /* Reduced from 300px */
     overflow: hidden;
