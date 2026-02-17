@@ -590,12 +590,17 @@ body {
     cursor: not-allowed;
 }
 
+.player-hand .card.disabled {
+    opacity: 0.5;
+}
+
 .card.disabled:hover {
     transform: none;
 }
 
 .card-back {
     cursor: default;
+    background-color: transparent;
 }
 
 .card-played {
