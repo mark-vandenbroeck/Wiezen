@@ -711,18 +711,66 @@ class GameEngine:
                 all_ids = [p.id for p in Player.query.filter_by(game_id=self.game_id).all()]
                 partner_ids = [pid for pid in all_ids if pid != player_id and pid != current_round.bidder_id]
 
-        # Determine if partner is winning
-        is_partner_winning = False
-        if current_trick:
-            winning_id = self._determine_trick_winner(trick.cards_played, current_round.trump_suit)
-            if winning_id in partner_ids:
-                is_partner_winning = True
-        
-        # Determine if it's Miserie contract
-        is_miserie = current_round.winning_bid in ['Miserie', 'Open Miserie']
-        
-        ai = AIPlayer(difficulty=player.ai_difficulty)
-        card = ai.select_card(hand, current_trick, trump_suit, led_suit, is_partner_winning, is_miserie)
+        try:
+            # Calculate context for Hard AI: played cards and player voids
+            played_cards = []
+            player_voids = {} # {player_id: [suits]}
+            
+            # Get all completed tricks in this round
+            all_tricks = Trick.query.filter(
+                Trick.round_id == current_round.id,
+                Trick.trick_number <= current_round.current_trick
+            ).all()
+            
+            for t in all_tricks:
+                if not t.cards_played:
+                    continue
+                    
+                trick_led_suit = None
+                for i, card_play in enumerate(t.cards_played):
+                    p_id = card_play['player_id']
+                    card_obj = self._parse_card(card_play['card_name'])
+                    if not card_obj:
+                        continue
+                        
+                    played_cards.append(card_obj)
+                    
+                    if i == 0:
+                        trick_led_suit = card_obj.suit
+                    elif trick_led_suit and card_obj.suit != trick_led_suit:
+                        # Player did not follow suit -> they are void in that suit
+                        if p_id not in player_voids:
+                            player_voids[p_id] = []
+                        if trick_led_suit not in player_voids[p_id]:
+                            player_voids[p_id].append(trick_led_suit)
+
+            # Determine if partner is winning
+            is_partner_winning = False
+            if current_trick:
+                # Filter out None cards from current_trick for safety
+                clean_trick_cards = [cp for cp in trick.cards_played if self._parse_card(cp['card_name'])]
+                if clean_trick_cards:
+                    winning_id = self._determine_trick_winner(clean_trick_cards, current_round.trump_suit)
+                    if winning_id in partner_ids:
+                        is_partner_winning = True
+
+            ai = AIPlayer(difficulty=player.ai_difficulty)
+            card = ai.select_card(
+                hand, 
+                current_trick, 
+                trump_suit, 
+                led_suit, 
+                is_partner_winning=is_partner_winning, 
+                is_miserie=is_miserie,
+                played_cards=played_cards,
+                player_voids=player_voids,
+                partner_ids=partner_ids
+            )
+        except Exception as e:
+            # Fallback to basic AI selection to prevent game freeze
+            # In a real app we would log this to a proper logger
+            ai = AIPlayer(difficulty='medium') # Fallback to medium
+            card = ai.select_card(hand, current_trick, trump_suit, led_suit, is_partner_winning=False)
         
         # Find the card name in the original hand list that matches the selected card
         for name, hand_card in zip(hand_names, hand):

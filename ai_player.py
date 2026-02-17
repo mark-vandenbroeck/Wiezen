@@ -155,7 +155,7 @@ class AIPlayer:
         
         return 'Pas'
     
-    def select_card(self, hand, current_trick, trump_suit, led_suit, is_partner_winning=False, is_miserie=False):
+    def select_card(self, hand, current_trick, trump_suit, led_suit, is_partner_winning=False, is_miserie=False, played_cards=None, player_voids=None, partner_ids=None):
         """
         Select a card to play
         
@@ -166,6 +166,9 @@ class AIPlayer:
             led_suit: Suit that was led (None if leading)
             is_partner_winning: Whether partner is currently winning the trick
             is_miserie: Whether the contract is Miserie (goal: win 0 tricks)
+            played_cards: List of Cards already played this round
+            player_voids: Dictionary {player_id: [Suits]} of known voids
+            partner_ids: List of IDs for current player's teammates
         
         Returns:
             Card to play
@@ -176,7 +179,7 @@ class AIPlayer:
         if self.difficulty == 'easy':
             return self._easy_card_selection(hand, current_trick, trump_suit, led_suit)
         elif self.difficulty == 'hard':
-            return self._hard_card_selection(hand, current_trick, trump_suit, led_suit, is_partner_winning)
+            return self._hard_card_selection(hand, current_trick, trump_suit, led_suit, is_partner_winning, played_cards, player_voids, partner_ids)
         else:  # medium
             return self._medium_card_selection(hand, current_trick, trump_suit, led_suit, is_partner_winning)
 
@@ -277,30 +280,59 @@ class AIPlayer:
         # Discard lowest card
         return min(hand, key=lambda c: c.rank.value)
     
-    def _hard_card_selection(self, hand, current_trick, trump_suit, led_suit, is_partner_winning):
-        """Hard AI: Advanced strategic play"""
+    def _hard_card_selection(self, hand, current_trick, trump_suit, led_suit, is_partner_winning, played_cards=None, player_voids=None):
+        """Hard AI: Advanced strategic play with card counting and void tracking"""
+        played_cards = played_cards or []
+        player_voids = player_voids or {}
+        
+        # Helper: Is a card a "guaranteed winner" in its suit?
+        def is_sure_winner(card):
+            if card.rank == Rank.Ace:
+                return True
+            # Check if all higher cards have been played
+            higher_ranks = [r for r in Rank if r.value > card.rank.value]
+            for r in higher_ranks:
+                higher_card_played = any(c.suit == card.suit and c.rank == r for c in played_cards)
+                # Also check if WE have the higher card in hand
+                higher_card_in_hand = any(c.suit == card.suit and c.rank == r for c in hand)
+                if not (higher_card_played or higher_card_in_hand):
+                    return False
+            return True
+
         if led_suit is None:
             # Leading: strategic choice
-            # Lead with Ace if we have one
-            aces = [card for card in hand if card.rank == Rank.Ace]
-            if aces:
-                # Prefer non-trump ace
-                non_trump_aces = [card for card in aces if card.suit != trump_suit]
-                if non_trump_aces:
-                    return non_trump_aces[0]
-                return aces[0]
             
-            # Lead with King if we have Ace-King in same suit
+            # 1. Lead "Sure Winners" (Aces or Kings if Ace is gone)
             for card in hand:
-                if card.rank == Rank.King:
-                    has_ace = any(c.rank == Rank.Ace and c.suit == card.suit for c in hand)
-                    if has_ace:
-                        return card
+                if is_sure_winner(card) and card.suit != trump_suit:
+                    return card
             
-            # Lead trump if we have many
+            # 2. Lead Trump if we have many to clear them
             trumps = [card for card in hand if card.suit == trump_suit]
             if len(trumps) >= 5:
+                # Lead a medium/high trump
                 return max(trumps, key=lambda c: c.rank.value)
+            
+            # 3. Void Exploitation: 
+            # If an opponent is void in a suit, leading that suit can be good to force them to trump.
+            opponent_ids = []
+            if partner_ids is not None:
+                # We need to know our own ID to be 100% sure, but we can assume anyone NOT in partner_ids 
+                # (and not us) is an opponent. However, partner_ids already excludes us.
+                opponent_ids = [p_id for p_id in player_voids.keys() if p_id not in partner_ids]
+            
+            # Analyze suit counts in hand
+            suit_counts = {}
+            for card in hand:
+                suit_counts[card.suit] = suit_counts.get(card.suit, 0) + 1
+                
+            for suit, count in suit_counts.items():
+                if count >= 3 and suit != trump_suit:
+                    for opp_id in opponent_ids:
+                        if opp_id in player_voids and suit in player_voids[opp_id]:
+                            # Opponent is void! Lead a low card of this suit to force them.
+                            suit_cards = [c for c in hand if c.suit == suit]
+                            return min(suit_cards, key=lambda c: c.rank.value)
             
             # Lead with high card
             high_cards = [card for card in hand if card.rank in [Rank.King, Rank.Queen, Rank.Jack]]
@@ -316,30 +348,15 @@ class AIPlayer:
             
             if is_partner_winning:
                 # Partner winning: play lowest card to save high cards
-                # EXCEPT if we are last and we want to "overtake" to take the lead? 
-                # (Rare in partnership except to clear trumps, usually keep partner winning)
                 return min(same_suit, key=lambda c: c.rank.value)
             
             # Opponent is winning
             higher_cards = [card for card in same_suit if card.rank.value > winning_card.rank.value]
             
-            # "Insnijden" / Finesse check:
-            # If an opponent is winning but our partner still HAS TO PLAY after us,
-            # we might play low to let the partner win, especially if our higher card 
-            # is not a certain winner (like a King when Ace is out) or if we want to 
-            # keep our high card for later.
-            num_played = len(current_trick)
-            if num_played < 3: # Someone (potentially partner) still plays after us
-                # If we have a high card but it's not the Ace, and we think partner might have Ace
-                # or we just want to see if partner can take it.
-                if higher_cards:
-                    best_card = max(higher_cards, key=lambda c: c.rank.value)
-                    if best_card.rank != Rank.Ace:
-                        # Consider playing low to "insnijden"
-                        return min(same_suit, key=lambda c: c.rank.value)
-
-            # Try to win with lowest winning card
+            # Try to win with lowest winning card, but be smart
             if higher_cards:
+                # If we have a choice of winners, use the lowest one
+                # UNLESS we want to keep it.
                 return min(higher_cards, key=lambda c: c.rank.value)
             
             # Can't win: play lowest
@@ -359,11 +376,11 @@ class AIPlayer:
                 return min(trumps, key=lambda c: c.rank.value)
         
         # Discard lowest non-trump card
+        # EXCEPT: discard a suit where we want to become void!
         non_trumps = [card for card in hand if card.suit != trump_suit]
         if non_trumps:
             return min(non_trumps, key=lambda c: c.rank.value)
         
-        # Only trumps left, play lowest
         return min(hand, key=lambda c: c.rank.value)
     
     def _get_current_winning_card(self, current_trick, trump_suit):
