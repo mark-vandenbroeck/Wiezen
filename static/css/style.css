@@ -456,12 +456,12 @@ body {
 .trump-badge {
     display: flex;
     align-items: center;
-    gap: 12px;
-    background-color: var(--bg-card);
-    padding: 6px 16px;
-    border-radius: 30px;
-    border: 2px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    gap: 10px;
+    background-color: white;
+    padding: 4px 14px;
+    border-radius: 20px;
+    border: 1px solid #CBD5E1;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all var(--transition-normal);
 }
 
