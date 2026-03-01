@@ -525,7 +525,7 @@ class AIPlayer:
         # Can't follow suit: play random
         return random.choice(hand)
     
-    def _medium_card_selection(self, hand, current_trick, trump_suit, led_suit, is_partner_winning):
+    def _medium_card_selection(self, hand, current_trick, trump_suit, led_suit, is_partner_winning, contract=None):
         """Medium AI: Basic strategic play"""
         if led_suit is None:
             # Leading: play high card or trump
@@ -579,7 +579,7 @@ class AIPlayer:
         # Can't win or no trumps: discard lowest card
         return min(hand, key=lambda c: c.rank.value)
     
-    def _hard_card_selection(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, is_partner_winning, played_cards=None, player_voids=None, partner_ids=None):
+    def _hard_card_selection(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, is_partner_winning, played_cards=None, player_voids=None, partner_ids=None, contract=None):
         """Hard AI: Advanced strategic play with card counting and void tracking"""
         played_cards = played_cards or []
         player_voids = player_voids or {}
@@ -587,6 +587,8 @@ class AIPlayer:
         
         # Determine Role
         is_attacker = (player_id == bidder_id) or (bidder_id in partner_ids)
+        is_troel_partner = (contract == 'Troel' and player_id in partner_ids and player_id != bidder_id)
+        is_troel_defender = (contract == 'Troel' and not is_attacker)
         
         # Calculate probabilities for all cards in hand
         probs = self.calculate_card_probabilities(hand, played_cards, player_voids, trump_suit)
@@ -606,10 +608,23 @@ class AIPlayer:
                 pass
 
         # Analyze Signals
-        signaled_suits = self._analyze_signals(played_cards, partner_ids, trump_suit)
+        # For Troel defenders in trick 0, signaling is forbidden to hide strength from the attackers.
+        signaled_suits = []
+        is_first_trick = len(played_cards) < 4
+        if not (is_troel_defender and is_first_trick):
+            signaled_suits = self._analyze_signals(played_cards, partner_ids, trump_suit)
+
 
         if led_suit is None:
             # Leading: strategic choice
+            
+            # TROEL PARTNER AGGRESSION:
+            # If we are the '4th Ace' partner in a Troel game, our ONLY job is to draw out trumps 
+            # to protect the main bidder who has the 3 other Aces.
+            if is_troel_partner:
+                trumps = [c for c in hand if c.suit == trump_suit]
+                if trumps:
+                    return max(trumps, key=lambda c: c.rank.value)
             
             # 0. COOPERATION: Lead Signaled Suit
             # If partner signaled a suit, and we have it, and we are not Attacker (or maybe even if we are?)
@@ -750,21 +765,26 @@ class AIPlayer:
         non_trumps = [card for card in hand if card.suit != trump_suit]
         if non_trumps:
             # SIGNALING: If we have a strong suit (e.g. Ace or King), discard a signal (8, 9, 10).
-            # Check for strong suits
-            strong_suits = set()
-            for s in suits:
-                if s == trump_suit: continue
-                cards_in_suit = [c for c in hand if c.suit == s]
-                if any(c.rank in [Rank.Ace, Rank.King] for c in cards_in_suit):
-                    strong_suits.add(s)
+            # Do NOT signal if we are a Troel defender in the first trick (hidden strength).
+            allow_signaling = not (is_troel_defender and is_first_trick)
             
-            # Try to signal a strong suit
-            for c in non_trumps:
-                if c.suit in strong_suits and c.rank in [Rank.Eight, Rank.Nine, Rank.Ten]:
-                    # Values 7,8,9 are typical signals (here mapped to rank checks)
-                    # Don't discard the Ace itself obviously
-                    # This is a good discard!
-                    return c
+            if allow_signaling:
+                # Check for strong suits
+                strong_suits = set()
+                suits = [Suit.Heart, Suit.Diamond, Suit.Club, Suit.Spade]
+                for s in suits:
+                    if s == trump_suit: continue
+                    cards_in_suit = [c for c in hand if c.suit == s]
+                    if any(c.rank in [Rank.Ace, Rank.King] for c in cards_in_suit):
+                        strong_suits.add(s)
+                
+                # Try to signal a strong suit
+                for c in non_trumps:
+                    if c.suit in strong_suits and c.rank in [Rank.Eight, Rank.Nine, Rank.Ten]:
+                        # Values 7,8,9 are typical signals (here mapped to rank checks)
+                        # Don't discard the Ace itself obviously
+                        # This is a good discard!
+                        return c
 
             # Sort by probability, then by rank
             return min(non_trumps, key=lambda c: (probs.get(c.name, 0), c.rank.value))

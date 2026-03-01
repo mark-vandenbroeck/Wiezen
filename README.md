@@ -149,7 +149,12 @@ De Hard AI probeert informatie door te geven aan zijn partner:
 -   **Seinen (Zenden)**: Als de AI moet afgooien (niet kan volgen), zal hij proberen een **hoge kaart** (7, 8, 9, 10) van een sterke kleur af te gooien. Dit is een signaal ("High Call") dat hij die kleur graag gespeeld wil hebben.
 -   **Lezen & Samenwerken**: De AI analyseert de afgooi van zijn partner. Als hij een signaal detecteert, zal hij (als hij aan de beurt is) bij voorkeur **die kleur uitkomen** om zijn partner in de hand te spelen.
 
-### 6. Miserie & No-Trump
+#### 7. Troel Heuristieken (Agressie & Stealth)
+Omdat de bondgenootschappen bij Troel onmiddellijk in de eerste ronde vaststaan, hanteert de Hard AI hier unieke voorgeprogrammeerde regels:
+-   **Partner Agressie (De 4e Aas)**: De AI-partner van de Troelist heeft maar één taak: zijn bondgenoot beschermen. Zodra deze partner mag uitkomen, zal hij zijn normale tactiek staken en **verplicht zijn hoogste troefkaart trekken** om de tegenstanders 'uit te roken'.
+-   **Verdediger Stealth**: AI-verdedigers weten dat de eerste slag per definitie naar de Troel-maatschap gaat. Ze zullen in de allereerste slag **nooit seinen** door een hoge kaart af te gooien als ze niet kunnen volgen. Dit zou namelijk louter de tegenstander (die de slag sowieso wint) slimmer maken inzake verdeling van sterke kaarten.
+
+### 8. Miserie & No-Trump
 -   **Miserie (Open)**: Dit contract wordt gespeeld als een **No-Trump** spel.
     -   Er is **geen troefkleur**.
     -   De **vlag** (kaart die de troefkleur bepaalde) heeft geen enkele extra waarde meer.
