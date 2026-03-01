@@ -141,7 +141,7 @@ De AI past zijn speelstijl aan op basis van zijn rol (Aanvaller vs. Verdediger) 
 -   **Afgooien**: Gooit direct zijn gevaarlijkste hoge kaarten (Azen/Heren) weg als hij niet kan volgen.
 
 #### 5. Eindspel Oplosser (Minimax Double Dummy)
--   **Perfect Information Monte Carlo**: Zodra er 5 of minder kaarten in het spel zijn, stapt de Hard AI over van kansberekening naar een wiskundig perfecte **Minimax** *Double Dummy* solver.
+-   **Perfect Information Monte Carlo**: Zodra er 4 of minder kaarten in het spel zijn, stapt de Hard AI over van kansberekening naar een wiskundig perfecte **Minimax** *Double Dummy* solver.
 -   De AI simuleert willekeurige geldige verdelingen van de onbekende kaarten (inclusief *voids*) en berekent via *Alpha-Beta Pruning* exact welke kaart gemiddeld de meeste slagen voor zijn team garandeert in het eindspel. Hierdoor verandert de AI in de laatste fase in een meedogenloze tegenspeler.
 
 #### 6. Samenwerking & Seinen (Bridge-style)

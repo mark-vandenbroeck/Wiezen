@@ -592,7 +592,7 @@ class AIPlayer:
         probs = self.calculate_card_probabilities(hand, played_cards, player_voids, trump_suit)
 
         # Minimax Double Dummy Solver (Endgame)
-        if len(hand) <= 5 and trump_suit is not None:
+        if len(hand) <= 4 and trump_suit is not None:
             # We only use it for standard/trump games for now, not miserie.
             try:
                 tt = self._get_best_card_minimax(
