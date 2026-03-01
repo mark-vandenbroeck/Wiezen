@@ -591,6 +591,20 @@ class AIPlayer:
         # Calculate probabilities for all cards in hand
         probs = self.calculate_card_probabilities(hand, played_cards, player_voids, trump_suit)
 
+        # Minimax Double Dummy Solver (Endgame)
+        if len(hand) <= 5 and trump_suit is not None:
+            # We only use it for standard/trump games for now, not miserie.
+            try:
+                tt = self._get_best_card_minimax(
+                    player_id, bidder_id, hand, current_trick, trump_suit, led_suit,
+                    played_cards, player_voids, partner_ids
+                )
+                if tt:
+                    return tt
+            except Exception as e:
+                # Fallback to standard hard AI if solver fails or takes too long
+                pass
+
         # Analyze Signals
         signaled_suits = self._analyze_signals(played_cards, partner_ids, trump_suit)
 
@@ -777,5 +791,207 @@ class AIPlayer:
             elif card.suit == led_suit and winning_card.suit == led_suit:
                 if card.rank.value > winning_card.rank.value:
                     winning_card = card
-        
         return winning_card
+        
+    def _get_best_card_minimax(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, played_cards, player_voids, partner_ids):
+        """Use Perfect Information Monte Carlo & Minimax Double Dummy to find the best card."""
+        team_ids = [player_id] + partner_ids
+        
+        # 1. Deduce turn order from first trick
+        player_order = []
+        for pc in played_cards:
+            pid = pc['player_id'] if isinstance(pc, dict) else getattr(pc, 'player_id', None)
+            if pid is not None and pid not in player_order:
+                player_order.append(pid)
+            if len(player_order) == 4:
+                break
+                
+        if len(player_order) < 4:
+            # We must be in trick 0 or 1. Don't use minimax if we don't know the full order.
+            return None
+        
+        other_pids = [pid for pid in player_order if pid != player_id]
+        
+        hand_sizes = {}
+        for pid in other_pids:
+            has_played_this_trick = any(tp == pid for tp, _ in current_trick)
+            expected_size = len(hand)
+            if has_played_this_trick:
+                expected_size -= 1
+            hand_sizes[pid] = max(0, expected_size)
+            
+        unknown_cards = self._get_unknown_cards(hand, played_cards)
+        
+        SIMULATIONS = 15
+        valid_cards_to_play = self._get_valid_cards_for_sim(hand, current_trick)
+        
+        if len(valid_cards_to_play) <= 1:
+            return valid_cards_to_play[0] if valid_cards_to_play else None
+            
+        card_scores = {c.name: 0 for c in valid_cards_to_play}
+        
+        for _ in range(SIMULATIONS):
+            distributions = self._generate_valid_distributions(unknown_cards, other_pids, player_voids, hand_sizes)
+            if not distributions: continue
+            
+            for test_card in valid_cards_to_play:
+                sim_hands = {player_id: [c for c in hand if c.name != test_card.name]}
+                for pid in other_pids:
+                    sim_hands[pid] = list(distributions[pid])
+                    
+                new_trick = list(current_trick) + [(player_id, test_card)]
+                
+                tricks_won_this_turn = 0
+                next_player = None
+                
+                if len(new_trick) == 4:
+                    winner_id = self._determine_trick_winner_sim(new_trick, trump_suit)
+                    if winner_id in team_ids:
+                        tricks_won_this_turn = 1
+                    next_player = winner_id
+                    new_trick = []
+                else:
+                    curr_idx = player_order.index(player_id)
+                    next_player = player_order[(curr_idx + 1) % 4]
+                    
+                val = tricks_won_this_turn + self._double_dummy_solve(
+                    sim_hands, new_trick, trump_suit, next_player, player_order, team_ids, -100, 100
+                )
+                
+                card_scores[test_card.name] += val
+                
+        best_card_name = max(card_scores, key=card_scores.get)
+        for c in valid_cards_to_play:
+            if c.name == best_card_name:
+                return c
+        return None
+
+    def _double_dummy_solve(self, sim_hands, current_trick, trump_suit, player_turn, player_order, team_ids, alpha, beta):
+        # Base case
+        if not sim_hands[player_turn]:
+            return 0
+            
+        legal_cards = self._get_valid_cards_for_sim(sim_hands[player_turn], current_trick)
+        is_our_team = player_turn in team_ids
+        
+        if is_our_team:
+            best_val = -100
+            for test_card in legal_cards:
+                new_hand = [c for c in sim_hands[player_turn] if c.name != test_card.name]
+                new_trick = list(current_trick) + [(player_turn, test_card)]
+                
+                new_sim_hands = {pid: list(cards) for pid, cards in sim_hands.items()}
+                new_sim_hands[player_turn] = new_hand
+                
+                tricks_won = 0
+                if len(new_trick) == 4:
+                    winner_id = self._determine_trick_winner_sim(new_trick, trump_suit)
+                    if winner_id in team_ids:
+                        tricks_won = 1
+                    next_player = winner_id
+                    new_trick = []
+                else:
+                    curr_idx = player_order.index(player_turn)
+                    next_player = player_order[(curr_idx + 1) % 4]
+                
+                val = tricks_won + self._double_dummy_solve(new_sim_hands, new_trick, trump_suit, next_player, player_order, team_ids, alpha, beta)
+                
+                best_val = max(best_val, val)
+                alpha = max(alpha, best_val)
+                if beta <= alpha:
+                    break
+            return best_val
+        else:
+            best_val = 100
+            for test_card in legal_cards:
+                new_hand = [c for c in sim_hands[player_turn] if c.name != test_card.name]
+                new_trick = list(current_trick) + [(player_turn, test_card)]
+                
+                new_sim_hands = {pid: list(cards) for pid, cards in sim_hands.items()}
+                new_sim_hands[player_turn] = new_hand
+                
+                tricks_won = 0
+                if len(new_trick) == 4:
+                    winner_id = self._determine_trick_winner_sim(new_trick, trump_suit)
+                    if winner_id in team_ids:
+                        tricks_won = 1
+                    next_player = winner_id
+                    new_trick = []
+                else:
+                    curr_idx = player_order.index(player_turn)
+                    next_player = player_order[(curr_idx + 1) % 4]
+                
+                val = tricks_won + self._double_dummy_solve(new_sim_hands, new_trick, trump_suit, next_player, player_order, team_ids, alpha, beta)
+                
+                best_val = min(best_val, val)
+                beta = min(beta, best_val)
+                if beta <= alpha:
+                    break
+            return best_val
+
+    def _get_valid_cards_for_sim(self, hand, current_trick):
+        if not current_trick: return hand
+        led_suit = current_trick[0][1].suit
+        same_suit = [c for c in hand if c.suit == led_suit]
+        return same_suit if same_suit else hand
+
+    def _generate_valid_distributions(self, unknown_cards, other_pids, player_voids, hand_sizes):
+        """Generate a random valid distribution of unknown cards honoring voids."""
+        MAX_TRIES = 50
+        for _ in range(MAX_TRIES):
+            random.shuffle(unknown_cards)
+            distributions = {pid: [] for pid in other_pids}
+            card_idx = 0
+            valid = True
+            
+            for pid in other_pids:
+                needed = hand_sizes[pid]
+                voids = player_voids.get(pid, [])
+                
+                assigned = 0
+                temp_idx = card_idx
+                while assigned < needed and temp_idx < len(unknown_cards):
+                    c = unknown_cards[temp_idx]
+                    if c.suit not in voids:
+                        distributions[pid].append(c)
+                        assigned += 1
+                        # Swap to organize used cards
+                        unknown_cards[temp_idx], unknown_cards[card_idx] = unknown_cards[card_idx], unknown_cards[temp_idx]
+                        card_idx += 1
+                    temp_idx += 1
+                    
+                if assigned < needed:
+                    valid = False
+                    break
+                    
+            if valid:
+                return distributions
+        
+        # Fallback: ignore voids
+        random.shuffle(unknown_cards)
+        distributions = {pid: [] for pid in other_pids}
+        card_idx = 0
+        for pid in other_pids:
+            needed = hand_sizes[pid]
+            distributions[pid] = unknown_cards[card_idx:card_idx+needed]
+            card_idx += needed
+        return distributions
+
+    def _determine_trick_winner_sim(self, current_trick, trump_suit):
+        led_suit = current_trick[0][1].suit
+        winning_card = current_trick[0][1]
+        winner_id = current_trick[0][0]
+        
+        for player_id, card in current_trick[1:]:
+            if card.suit == trump_suit and winning_card.suit != trump_suit:
+                winning_card = card
+                winner_id = player_id
+            elif card.suit == trump_suit and winning_card.suit == trump_suit:
+                if card.rank.value > winning_card.rank.value:
+                    winning_card = card
+                    winner_id = player_id
+            elif card.suit == led_suit and winning_card.suit == led_suit:
+                if card.rank.value > winning_card.rank.value:
+                    winning_card = card
+                    winner_id = player_id
+        return winner_id
