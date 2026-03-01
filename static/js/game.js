@@ -28,6 +28,7 @@ async function initGame() {
 
     // Set up event listeners
     setupEventListeners();
+    setupUndoListener();
 
     // Start game loop
     gameLoop();
@@ -583,6 +584,45 @@ function renderHands() {
 
         const cards = gameState.round.hands[player.id] || [];
         const isHuman = player.is_human;
+        // Logic to show Undo button:
+        // 1. Must be human's turn
+        // 2. Must be in 'playing' phase (or 'completed' before new round starts)
+        // 3. Human must have played at least one card in this round.
+        //    (We can check if current trick > 0 OR if current trick has cards played by human? 
+        //     Wait, if it's human's turn, the current trick might be empty or partially full.
+        //     If it's trick 0 and human hasn't played yet -> No Undo.
+        //     If it's trick > 0 -> Undo available.
+        //     If it's trick 0 and human played -> wait, if human played, it's NOT human's turn usually, unless they led and everyone else played?
+        //     Actually, Undo is valid if:
+        //       - It is Human's Turn
+        //       - AND (current_trick > 0 OR (current_trick == 0 and cards_played > 0? No, if it's human turn in trick 0, they haven't played yet))
+        //     So basically: current_trick > 0 OR (current_trick == 0 AND human is NOT leader? No.)
+
+        // Simpler: Can always undo if NOT (trick 0 AND empty cards_played).
+        // Check functionality: undo_last_move reverts to *before* human played.
+
+        if (isHuman) {
+            const undoBtn = document.getElementById('undo-btn');
+            if (undoBtn) {
+                // Logic: Can undo if I have played ANY card in this round.
+                // (Backend handles unwinding back to my turn)
+
+                const playedInCurrentTrick = gameState.current_trick &&
+                    gameState.current_trick.cards_played &&
+                    gameState.current_trick.cards_played.some(c => c.player_id === currentPlayerId);
+
+                const hasPlayedInRound = gameState.round.current_trick > 0 || playedInCurrentTrick;
+
+                const isPlayingPhase = gameState.round.phase === 'playing' || gameState.round.phase === 'completed';
+
+                if (hasPlayedInRound && isPlayingPhase) {
+                    undoBtn.style.display = 'inline-block';
+                } else {
+                    undoBtn.style.display = 'none';
+                }
+            }
+        }
+
         const isHumanTurn = isHuman && (getCurrentTurnPlayerId() === player.id) && gameState.round.phase === 'playing';
 
         // Open Miserie Reveal: bidder's hand revealed after trick 1
@@ -1132,4 +1172,41 @@ function renderInGameStats(stats) {
             }
         }
     });
+}
+
+
+// --- Undo Logic ---
+
+async function undoLastMove() {
+    if (!gameState || !currentPlayerId) return;
+
+    try {
+        const response = await fetch(`/api/game/${GAME_ID}/undo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player_id: currentPlayerId })
+        });
+
+        const result = await response.json();
+        if (result.error) {
+            console.error('Undo failed:', result.error);
+            alert('Kan niet ongedaan maken: ' + result.error);
+        } else {
+            console.log('Undo successful:', result.message);
+            // Force immediate update
+            await updateGameState();
+            // Re-enable interactions if they were disabled
+            isProcessingAI = false;
+            renderHands(); // Force re-render of hands
+        }
+    } catch (e) {
+        console.error('Error undoing move:', e);
+    }
+}
+
+function setupUndoListener() {
+    const undoBtn = document.getElementById('undo-btn');
+    if (undoBtn) {
+        undoBtn.addEventListener('click', undoLastMove);
+    }
 }

@@ -73,4 +73,4 @@ def test_hierarchy_validation(app, test_game):
     result = engine.process_bid(bidder2.id, 'Vraag')
     
     assert 'error' in result
-    assert 'Cannot bid Vraag after higher bid' in result['error']
+    assert 'Cannot bid Vraag' in result['error'] and 'after higher bid' in result['error']

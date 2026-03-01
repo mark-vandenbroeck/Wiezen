@@ -40,7 +40,7 @@ class TestAIStrategy(unittest.TestCase):
             (1, Card(Suit.Club, Rank.Ace))
         ]
         
-        selected = self.ai_medium.select_card(hand_weak, current_trick_lost, trump_suit, led_suit)
+        selected = self.ai_medium.select_card(1, 2, hand_weak, current_trick_lost, trump_suit, led_suit)
         self.assertEqual(selected.rank, Rank.Two, "Should play lowest card when it can't win")
 
     def test_medium_wasting_trump(self):
@@ -68,7 +68,7 @@ class TestAIStrategy(unittest.TestCase):
             Card(Suit.Diamond, Rank.Two)
         ]
         
-        selected = self.ai_medium.select_card(ai_hand, current_trick, trump_suit, led_suit)
+        selected = self.ai_medium.select_card(1, 2, ai_hand, current_trick, trump_suit, led_suit)
         self.assertEqual(selected.suit, Suit.Diamond)
         self.assertEqual(selected.rank, Rank.Two, "Should discard lowest card instead of wasting a low trump")
 
@@ -86,7 +86,7 @@ class TestAIStrategy(unittest.TestCase):
         trump_suit = Suit.Heart
         led_suit = Suit.Club
         
-        selected = self.ai_hard.select_card(hand, current_trick, trump_suit, led_suit)
+        selected = self.ai_hard.select_card(1, 2, hand, current_trick, trump_suit, led_suit)
         self.assertEqual(selected.rank, Rank.Two, "Hard AI should play lowest card when it can't win")
 
     def test_hard_overtrumping(self):
@@ -110,7 +110,7 @@ class TestAIStrategy(unittest.TestCase):
             Card(Suit.Diamond, Rank.Two)
         ]
         
-        selected = self.ai_hard.select_card(ai_hand, current_trick, trump_suit, led_suit)
+        selected = self.ai_hard.select_card(1, 2, ai_hand, current_trick, trump_suit, led_suit)
         self.assertEqual(selected.suit, Suit.Diamond)
         self.assertEqual(selected.rank, Rank.Two, "Hard AI should not waste a low trump")
 

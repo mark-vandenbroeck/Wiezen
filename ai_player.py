@@ -349,7 +349,7 @@ class AIPlayer:
         
         return 'Pas'
     
-    def select_card(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, is_partner_winning=False, is_miserie=False, played_cards=None, player_voids=None, partner_ids=None):
+    def select_card(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, is_partner_winning=False, contract=None, bidder_hand=None, played_cards=None, player_voids=None, partner_ids=None):
         """
         Select a card to play
         
@@ -361,7 +361,8 @@ class AIPlayer:
             trump_suit: Current trump suit
             led_suit: Suit that was led (None if leading)
             is_partner_winning: Whether partner is currently winning the trick
-            is_miserie: Whether the contract is Miserie (goal: win 0 tricks)
+            contract: The current winning bid string (e.g., 'Miserie', 'Open Miserie')
+            bidder_hand: List of Card objects of the bidder (only for Open Miserie)
             played_cards: List of Cards already played this round
             player_voids: Dictionary {player_id: [Suits]} of known voids
             partner_ids: List of IDs for current player's teammates
@@ -369,8 +370,13 @@ class AIPlayer:
         Returns:
             Card to play
         """
+        is_miserie = contract in ['Miserie', 'Open Miserie']
         if is_miserie:
-            return self._miserie_card_selection(player_id, bidder_id, hand, current_trick, trump_suit, led_suit)
+            if player_id == bidder_id:
+                return self._miserie_card_selection(hand, current_trick, trump_suit, led_suit)
+            else:
+                return self._miserie_defender_selection(player_id, bidder_id, hand, current_trick, trump_suit, led_suit, contract, bidder_hand, player_voids)
+            
             
         if self.difficulty == 'easy':
             return self._easy_card_selection(hand, current_trick, trump_suit, led_suit)
@@ -379,8 +385,8 @@ class AIPlayer:
         else:  # medium
             return self._medium_card_selection(hand, current_trick, trump_suit, led_suit, is_partner_winning)
 
-    def _miserie_card_selection(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit):
-        """Strategic play for Miserie: AVOD winning tricks"""
+    def _miserie_card_selection(self, hand, current_trick, trump_suit, led_suit):
+        """Strategic play for Miserie bidder: AVOID winning tricks"""
         if led_suit is None:
             # Leading: play relatively high card of a "safe" suit?
             # Or just play the lowest card to be safe.
@@ -404,16 +410,6 @@ class AIPlayer:
             # Determine currently winning card in trick
             winning_card = self._get_current_winning_card(current_trick, trump_suit)
             
-            # IMPROVEMENT: If we are a defender, and the miserie player has already played
-            # and is NOT winning the trick, we should discard our HIGHEST card of this suit.
-            if player_id != bidder_id:
-                bidder_play = next((card for pid, card in current_trick if pid == bidder_id), None)
-                if bidder_play:
-                    # Is someone else winning with a higher card than the bidder?
-                    if winning_card != bidder_play:
-                        # Bidder is safe, discard highest
-                        return max(same_suit, key=lambda c: c.rank.value)
-            
             # Strategy: play the HIGHEST card that is still LOWER than the winning card
             # This gets rid of high cards safely.
             # If all cards are higher, play the LOWEST card (forced to win or play high).
@@ -425,8 +421,94 @@ class AIPlayer:
             # All cards are higher: forced to play, play lowest to keep better cards for later
             return min(same_suit, key=lambda c: c.rank.value)
 
-        # Can't follow suit: Discard the HIGHEST card in the hand (Aces, Kings)
-        # to get rid of dangerous cards.
+        return max(hand, key=lambda c: c.rank.value)
+
+    def _miserie_defender_selection(self, player_id, bidder_id, hand, current_trick, trump_suit, led_suit, contract, bidder_hand, player_voids):
+        """Defensive strangling tactics against Miserie and Open Miserie"""
+        player_voids = player_voids or {}
+        bidder_voids = player_voids.get(bidder_id, [])
+
+        is_open = contract == 'Open Miserie' and bidder_hand is not None
+
+        if led_suit is None:
+            # 1. Leading
+            
+            if is_open:
+                # Perfect Information Strangling
+                # Find a suit where the bidder MUST win if we lead a specific card
+                # This happens if we lead a card LOWER than their lowest card in that suit,
+                # and they must follow suit.
+                for suit in [Suit.Heart, Suit.Diamond, Suit.Club, Suit.Spade]:
+                    bidder_suit_cards = [c for c in bidder_hand if c.suit == suit]
+                    if bidder_suit_cards:
+                        bidder_lowest = min(bidder_suit_cards, key=lambda c: c.rank.value)
+                        
+                        my_suit_cards = [c for c in hand if c.suit == suit]
+                        
+                        # Can I lead a card lower than their lowest?
+                        lower_cards = [c for c in my_suit_cards if c.rank.value < bidder_lowest.rank.value]
+                        if lower_cards:
+                            # Play the highest possible card that is STILL lower than their lowest
+                            return max(lower_cards, key=lambda c: c.rank.value)
+            
+            # Standard Strangling (or fallback for Open)
+            # Find suits the bidder is NOT void in.
+            candidate_suits = [s for s in [Suit.Heart, Suit.Diamond, Suit.Club, Suit.Spade] if s not in bidder_voids]
+            
+            best_lead = None
+            lowest_rank_val = 99
+            
+            # Prefer to lead a suit where we have very low cards to stay under the bidder
+            for suit in candidate_suits:
+                my_cards = [c for c in hand if c.suit == suit]
+                if my_cards:
+                    lowest_card = min(my_cards, key=lambda c: c.rank.value)
+                    if lowest_card.rank.value < lowest_rank_val:
+                        lowest_rank_val = lowest_card.rank.value
+                        best_lead = lowest_card
+            
+            if best_lead:
+                return best_lead
+                
+            # If we don't have any safe suits, just play lowest overall
+            return min(hand, key=lambda c: c.rank.value)
+
+        # 2. Following Suit
+        same_suit = [card for card in hand if card.suit == led_suit]
+        if same_suit:
+            winning_card = self._get_current_winning_card(current_trick, trump_suit)
+            bidder_play = next((card for pid, card in current_trick if pid == bidder_id), None)
+            
+            if bidder_play:
+                # Bidder has already played in this trick.
+                if winning_card == bidder_play:
+                    # Bidder is currently winning the trick!
+                    # Play the HIGHEST card we have that is LOWER than the bidder's card
+                    # to force them to win it, while keeping ourselves safe for future.
+                    # Or play any lower card.
+                    lower_cards = [c for c in same_suit if c.rank.value < bidder_play.rank.value]
+                    if lower_cards:
+                        return max(lower_cards, key=lambda c: c.rank.value)
+                    
+                    # We only have higher cards. Play the lowest one to minimize damage.
+                    return min(same_suit, key=lambda c: c.rank.value)
+                else:
+                    # Bidder is safe (someone else is winning).
+                    # We can safely discard our highest card of this suit.
+                    return max(same_suit, key=lambda c: c.rank.value)
+                    
+            else:
+                # Bidder still has to play!
+                
+                # If we are currently winning, we MUST keep the trick dangerous (high) 
+                # but we want to stay 'under' the bidder if possible? 
+                # Actually, standard strategy: put a very LOW card on the table
+                # to create a "trap" forcing the bidder to win if they only have high cards.
+                return min(same_suit, key=lambda c: c.rank.value)
+                
+        # 3. Discarding (Void)
+        # We can't follow suit. Bidder might still have to play, or already played.
+        # Discard the absolute HIGHEST card we have to make ourselves safer in other suits.
         return max(hand, key=lambda c: c.rank.value)
     
     def _easy_card_selection(self, hand, current_trick, trump_suit, led_suit):

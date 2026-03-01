@@ -941,6 +941,11 @@ class GameEngine:
             if is_miserie:
                 effective_trump_suit = None
 
+            bidder_hand = None
+            if is_miserie and current_round.winning_bid == 'Open Miserie':
+                bidder_hand_names = current_round.hands.get(str(current_round.bidder_id), [])
+                bidder_hand = [self._parse_card(name) for name in bidder_hand_names]
+
             card = ai.select_card(
                 player_id,
                 current_round.bidder_id,
@@ -949,7 +954,8 @@ class GameEngine:
                 effective_trump_suit, 
                 led_suit, 
                 is_partner_winning=is_partner_winning, 
-                is_miserie=is_miserie,
+                contract=current_round.winning_bid,
+                bidder_hand=bidder_hand,
                 played_cards=played_cards,
                 player_voids=player_voids,
                 partner_ids=partner_ids
@@ -962,6 +968,11 @@ class GameEngine:
             if is_miserie:
                 effective_trump_suit = None
 
+            bidder_hand = None
+            if is_miserie and current_round.winning_bid == 'Open Miserie':
+                bidder_hand_names = current_round.hands.get(str(current_round.bidder_id), [])
+                bidder_hand = [self._parse_card(name) for name in bidder_hand_names]
+
             card = ai.select_card(
                 player_id,
                 current_round.bidder_id,
@@ -970,7 +981,8 @@ class GameEngine:
                 effective_trump_suit, 
                 led_suit, 
                 is_partner_winning=is_partner_winning,
-                is_miserie=is_miserie
+                contract=current_round.winning_bid,
+                bidder_hand=bidder_hand
             )
         
         # Find the card name in the original hand list that matches the selected card
@@ -1192,3 +1204,99 @@ class GameEngine:
             self.game.deck_order = None
             
         db.session.commit()
+
+    def undo_last_move(self, player_id):
+        """
+        Undo the last played card(s) until it is player_id's turn again.
+        Only works if player_id has played at least once in the current round
+        and the round is not fully finalized (though it handles 'completed' status reversion).
+        """
+        current_round = self.get_current_round()
+        if not current_round:
+            return {'error': 'No active round'}
+
+        # Prevent undoing if round is in bidding phase or earlier
+        if current_round.phase in ['dealing', 'bidding']:
+            return {'error': 'Cannot undo during bidding phase'}
+
+        # Calculate max undo steps to prevent infinite loops
+        # Max steps = 4 (full trick) + 1 (start of new trick) = 5 is safe margin
+        steps = 0
+        max_steps = 10 
+        
+        while steps < max_steps:
+            # 1. Get current state (Round status might change during loop)
+            # Check if round was completed
+            if current_round.phase == 'completed':
+                # Revert round status
+                current_round.phase = 'playing'
+                # Delete scores for this round
+                Score.query.filter_by(game_id=self.game_id, round_number=current_round.round_number).delete()
+                # If game deck order was set (for shuffle), reset it? 
+                # Actually, deck_order is set at end of round. We should clear it to be safe.
+                self.game.deck_order = None
+                flag_modified(self.game, "deck_order")
+            
+            # 2. Get the last active trick
+            # If current_trick is empty/new, we might need to go back to previous trick
+            trick = Trick.query.filter_by(
+                round_id=current_round.id,
+                trick_number=current_round.current_trick
+            ).first()
+            
+            if not trick or not trick.cards_played:
+                if current_round.current_trick > 0:
+                    # Move back to previous trick
+                    previous_trick_num = current_round.current_trick - 1
+                    # Delete the empty current trick if it exists
+                    if trick:
+                        db.session.delete(trick)
+                    
+                    current_round.current_trick = previous_trick_num
+                    trick = Trick.query.filter_by(
+                        round_id=current_round.id,
+                        trick_number=previous_trick_num
+                    ).first()
+                else:
+                    return {'error': 'Nothing to undo in this round'}
+
+            if not trick or not trick.cards_played:
+                 return {'error': 'Nothing to undo'}
+
+            # 3. Pop the last played card
+            last_play = trick.cards_played.pop()
+            last_player_id = last_play['player_id']
+            card_name = last_play['card_name']
+            
+            # Update trick in DB
+            flag_modified(trick, "cards_played")
+            
+            # Reset trick winner if it was set (since we just modified the trick)
+            trick.winner_id = None
+            
+            # 4. Return card to player's hand
+            # Need strict string keys for JSON dict
+            str_pid = str(last_player_id)
+            if str_pid not in current_round.hands:
+                current_round.hands[str_pid] = []
+            current_round.hands[str_pid].append(card_name)
+            flag_modified(current_round, "hands")
+            
+            # Commit this step
+            db.session.commit()
+            
+            steps += 1
+            
+            # 5. Check if we should stop
+            # We stop if the NEXT player to play is the requested player_id
+            # The next player is determined by checkTurn logic:
+            # - If trick is empty: leader_id
+            # - If trick not empty: next in order
+            
+            # BUT, we just undid the move of `last_player_id`. 
+            # So `last_player_id` is now the one who needs to play.
+            if last_player_id == player_id:
+                # We successfully undid up to the player's own move.
+                return {'success': True, 'message': 'Undone to your turn'}
+                
+        return {'error': 'Could not undo to your turn (limit reached)'}

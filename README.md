@@ -128,8 +128,12 @@ De AI past zijn speelstijl aan op basis van zijn rol (Aanvaller vs. Verdediger) 
 
 #### 3. Verdedigende Tactieken
 -   **Troef Vermijden**: Verdedigers zullen bijna nooit troef uitkomen, tenzij ze hiertoe gedwongen worden. Ze bewaren hun troeven om slagen van de bieder af te troeven.
--   **Miserie Verdediging**:
-    -   Als de Miserie-speler al gespeeld heeft en de slag *niet* wint (veilig is), zal de AI-verdediger zijn **hoogste kaart** van die kleur weggooien om 'gevaarlijke' slagen kwijt te raken.
+-   **Miserie Verdediging (Wurgen)**:
+    -   De AI-verdedigers spelen extreem agressief om de bieder een slag te laten winnen.
+    -   **Uitkomen (Leading)**: Komen gericht uit met kleuren waarvan ze weten dat de bieder niet *void* is, en waarbij ze zelf zeer lage kaarten hebben om 'onder' de bieder te blijven.
+    -   **Volgen (Following)**: Als de bieder al een (lage) kaart op tafel heeft liggen en de slag dreigt te winnen, proberen de AI-verdedigers *bewust een lagere kaart* op te gooien om de val te laten dichtklappen.
+-   **Open Miserie Verdediging (Perfect Information)**:
+    -   Omdat de kaarten van de bieder open op tafel liggen, heeft de Hard AI hier perfecte informatie. De AI-verdedigers berekenen exact met welke kleur en welke minimale kaart-waarde ze moeten uitkomen zodat de bieder *onomkeerbaar* gedwongen wordt om een slag (en het spel) te winnen.
 
 #### 4. Miserie Zelf Spelen
 -   **Starten**: Komt uit met de laagste kaart van zijn langste kleur (veiligheid).

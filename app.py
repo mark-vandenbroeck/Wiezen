@@ -196,6 +196,18 @@ def play_card(game_id):
     return jsonify(result)
 
 
+@app.route('/api/game/<int:game_id>/undo', methods=['POST'])
+def undo_move(game_id):
+    """Undo last move"""
+    data = request.get_json()
+    player_id = data.get('player_id')
+    
+    engine = GameEngine(game_id)
+    result = engine.undo_last_move(player_id)
+    
+    return jsonify(result)
+
+
 @app.route('/api/game/<int:game_id>/trump', methods=['POST'])
 def select_trump(game_id):
     """Select trump suit (for Solo Slim)"""
