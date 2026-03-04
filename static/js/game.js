@@ -156,6 +156,7 @@ async function selectTrump(suit) {
         if (result.error) {
             alert(result.error);
         } else {
+            window.hasSelectedTrump = true;
             document.getElementById('trump-modal').classList.remove('active');
             await updateGameState();
         }
@@ -193,9 +194,11 @@ async function submitBid(bid) {
             alert(result.error);
         } else {
             if (result.bid === 'Solo Slim' || result.bid === 'Abondance') {
-                // Show trump selection modal if Solo Slim or Abondance won
-                document.getElementById('trump-modal').classList.add('active');
+                // We don't trigger modal here directly anymore because it might not be the last bid
+                // The state polling in renderGameState will catch it when playing phase starts
                 hideBiddingModal();
+                await updateGameState();
+                checkTurnAndAct();
             } else {
                 await updateGameState();
                 // Trigger AI check if next player is AI
@@ -478,6 +481,7 @@ function renderGameState() {
 
     // Check phase and turn for Modal
     if (gameState.round.phase === 'bidding' || gameState.round.phase === 'choosing_alleen') {
+        window.hasSelectedTrump = false;
         const modal = document.getElementById('bidding-modal');
         // Only show if it matches current player ID
         if (gameState.current_bidder_id === currentPlayerId && currentPlayerId !== null) {
@@ -538,6 +542,19 @@ function renderGameState() {
         }
     } else {
         hideBiddingModal();
+
+        // Show trump selection modal if human won Solo Slim or Abondance and hasn't picked yet
+        if (gameState.round.phase === 'playing' &&
+            (gameState.round.winning_bid === 'Solo Slim' || gameState.round.winning_bid === 'Abondance') &&
+            gameState.round.bidder_id === currentPlayerId &&
+            gameState.round.current_trick === 0 &&
+            (!gameState.current_trick || !gameState.current_trick.cards_played || gameState.current_trick.cards_played.length === 0) &&
+            !window.hasSelectedTrump) {
+            document.getElementById('trump-modal').classList.add('active');
+        } else {
+            document.getElementById('trump-modal').classList.remove('active');
+        }
+
         if (gameState.round.phase === 'completed') {
             const newRoundBtn = document.getElementById('new-round-btn');
             newRoundBtn.style.display = 'block';

@@ -1,8 +1,12 @@
 import pytest
+import os
+
+# MUST SET BEFORE IMPORTING APP to prevent resetting the main db!
+os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+
 from app import app as flask_app
 from models import db, Game, Player, GameRound, Trick, Score
 from game_engine import GameEngine
-
 @pytest.fixture
 def app():
     # Use in-memory SQLite for testing

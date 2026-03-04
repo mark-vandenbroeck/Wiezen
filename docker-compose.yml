@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  wiezen-app:
+    build: .
+    container_name: wiezen-app
+    ports:
+      - "5005:5005"
+    volumes:
+      # Mount the instance directory to persist the SQLite database
+      - ./instance:/app/instance
+    restart: unless-stopped

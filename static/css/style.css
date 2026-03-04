@@ -317,14 +317,14 @@ body {
     grid-area: left;
     min-height: 0;
     max-height: 100%;
-    overflow-y: auto;
+    overflow-y: hidden;
 }
 
 .player-right {
     grid-area: right;
     min-height: 0;
     max-height: 100%;
-    overflow-y: auto;
+    overflow-y: hidden;
 }
 
 .player-info {

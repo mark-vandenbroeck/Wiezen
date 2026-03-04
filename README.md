@@ -26,6 +26,8 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
 
 ## Installatie
 
+### Optie 1: Lokale installatie
+
 1. **Clone de repository** (of navigeer naar de directory):
    ```bash
    cd /Users/mark/Documents/Python/Wiezen
@@ -42,6 +44,20 @@ Een Flask web applicatie om het Belgische kaartspel Wiezen te spelen tegen 3 com
    ```
 
 4. **Open in browser**:
+   ```
+   http://localhost:5005
+   ```
+
+### Optie 2: Met Docker 🐳
+
+De app is Docker-ready met database persistentie op het host filesysteem.
+
+1. **Start de container op de achtergrond**:
+   ```bash
+   docker compose up -d --build
+   ```
+
+2. **Open in browser**:
    ```
    http://localhost:5005
    ```
