@@ -331,11 +331,11 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    margin-bottom: var(--spacing-md);
-    padding-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    padding-bottom: var(--spacing-xs);
     border-bottom: 2px solid var(--border-color);
     position: relative;
-    min-height: 40px;
+    min-height: 30px;
 }
 
 .player-name {
@@ -448,19 +448,19 @@ body {
     grid-area: center;
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-xs);
 }
 
 .game-info {
     background-color: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-md);
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-xs) var(--spacing-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
     box-shadow: var(--shadow-sm);
-    min-height: 50px;
+    min-height: 40px;
 }
 
 .trump-info,
@@ -582,7 +582,7 @@ body {
 
 .game-controls {
     display: flex;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
     justify-content: center;
 }
 
