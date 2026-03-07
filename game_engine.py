@@ -1183,8 +1183,9 @@ class GameEngine:
         tricks = Trick.query.filter_by(round_id=game_round.id).order_by(Trick.trick_number).all()
         for trick in tricks:
             if trick.cards_played:
-                for play in trick.cards_played:
-                    all_cards.append(play['card_name'])
+                trick_cards = [play['card_name'] for play in trick.cards_played]
+                random.shuffle(trick_cards)
+                all_cards.extend(trick_cards)
                     
         # If the round ended early (e.g. Miserie loss), collect remaining cards from hands
         if len(all_cards) < 52:
